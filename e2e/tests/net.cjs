@@ -32,7 +32,8 @@ async function apiAccountWithCharacter(account = uniqueAccount()) {
 
 /**
  * Client WebSocket de zone. Conserve tous les messages reçus ; `snapshots` liste
- * `{ tick, ack, receivedAt, entities }`. `send(t, d, seq?)` envoie une enveloppe brute.
+ * `{ tick, ack, receivedAt, entities }`. `send(t, d, seq?)` envoie une enveloppe brute
+ * (`attack: false` ajouté aux `input` qui ne le précisent pas).
  */
 async function openZoneSocket({ token, character }, zoneId = 'valcendre') {
   const { ticket, ws_path: wsPath } = await api('POST', `/api/zones/${zoneId}/join`, { character_id: character.id }, token);
@@ -47,7 +48,9 @@ async function openZoneSocket({ token, character }, zoneId = 'valcendre') {
     seq: 0,
     send(t, d, seq) {
       this.seq = seq ?? this.seq + 1;
-      ws.send(JSON.stringify({ t, seq: this.seq, d }));
+      // Protocole v3 : `input` porte aussi la gâchette ; ajoutée (relâchée) si le test l'omet.
+      const payload = t === 'input' && d && typeof d === 'object' && !('attack' in d) ? { ...d, attack: false } : d;
+      ws.send(JSON.stringify({ t, seq: this.seq, d: payload }));
       return this.seq;
     },
     sendRaw(text) {

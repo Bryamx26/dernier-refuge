@@ -21,6 +21,8 @@ DEFAULT_RATE_PER_SECOND = 60.0  # 20 input + 1 ping par seconde, avec marge pour
 DEFAULT_BURST = 60
 # Entrées de jeu en attente ; au-delà, les plus anciennes sont jetées (contrat phase 2).
 MAX_PENDING_INPUTS = 64
+# Actions ponctuelles en attente (ramasser, utiliser…) ; au-delà, les plus anciennes sont jetées.
+MAX_PENDING_ACTIONS = 16
 # Messages serveur en attente d'écriture ; au-delà, le client est trop lent → fermeture 4009.
 # 64 messages ≈ 3 s de snapshots à 20 Hz.
 MAX_OUTGOING_MESSAGES = 64
@@ -83,6 +85,8 @@ class ClientSession:
         self._seq = 0
         # Entrées de jeu reçues, consommées par la zone (au plus `max_inputs_per_tick` par tick).
         self.pending_inputs: deque[ClientEnvelope] = deque(maxlen=MAX_PENDING_INPUTS)
+        # Actions ponctuelles (`action`), toutes traitées au tick suivant.
+        self.pending_actions: deque[ClientEnvelope] = deque(maxlen=MAX_PENDING_ACTIONS)
         self.dropped_inputs = 0
         # Messages refusés (débit, protocole) depuis l'ouverture de la connexion.
         self.rejected_count = 0
@@ -199,6 +203,10 @@ class ClientSession:
     def allow_message(self) -> bool:
         """Applique le limiteur de débit à un message entrant."""
         return self._rate_limiter.try_acquire()
+
+    def enqueue_action(self, envelope: ClientEnvelope) -> None:
+        """Met une action ponctuelle en file (bornée : les plus anciennes sont jetées)."""
+        self.pending_actions.append(envelope)
 
     def enqueue_input(self, envelope: ClientEnvelope) -> None:
         """Met une entrée de jeu en file ; si la file est pleine, la plus ancienne est jetée."""

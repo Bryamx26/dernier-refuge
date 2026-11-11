@@ -16,7 +16,16 @@ const welcome = {
   },
 };
 
-const entity = { id: 'e-abc', kind: 'player', name: 'Élise', x: 10.5, y: 4.25, aim: 1.2, anim: 'walk' };
+const entity = {
+  id: 'e-abc',
+  kind: 'player',
+  name: 'Élise',
+  x: 10.5,
+  y: 4.25,
+  aim: 1.2,
+  anim: 'walk',
+  health: 0.75,
+};
 const snapshot = { t: 'snapshot', seq: 4, tick: 11, d: { ack_seq: 7, entities: [entity] } };
 
 describe('isServerMessageType', () => {
@@ -53,6 +62,63 @@ describe('decodeServerMessage', () => {
       decodeServerMessage('{"t":"error","seq":3,"tick":3,"d":{"code":"rate_limited","message":"doucement"}}')
         ?.t,
     ).toBe('error');
+  });
+
+  it('décode vitals, inventory, fx et notice (phase 3)', () => {
+    const vitals = {
+      t: 'vitals',
+      seq: 5,
+      tick: 9,
+      d: {
+        health: 72.5,
+        max_health: 100,
+        hunger: 80,
+        thirst: 61.2,
+        bleeding: true,
+        dead: false,
+        action: 'Fouille : Pharmacie',
+        action_progress: 0.4,
+      },
+    };
+    expect(parseServerMessage(vitals)).toEqual(vitals);
+    const slot = {
+      slot: 2,
+      item: 'pistol',
+      name: 'Pistolet 9 mm',
+      kind: 'firearm',
+      qty: 1,
+      weight: 0.9,
+      durability: 0.5,
+      loaded: 7,
+    };
+    const inventory = {
+      t: 'inventory',
+      seq: 6,
+      tick: 9,
+      d: { slots: [slot], capacity: 20, equipped: 2, weight: 0.9, max_weight: 18 },
+    };
+    expect(parseServerMessage(inventory)).toEqual(inventory);
+    expect(
+      parseServerMessage({ ...inventory, d: { ...inventory.d, slots: [{ ...slot, kind: 'laser' }] } }),
+    ).toBeNull();
+    const fx = { t: 'fx', seq: 7, tick: 9, d: { events: [{ kind: 'shot', x: 1, y: 2, x2: 9, y2: 2 }] } };
+    expect(parseServerMessage(fx)).toEqual(fx);
+    expect(
+      parseServerMessage({ ...fx, d: { events: [{ kind: 'nuke', x: 1, y: 2, x2: 9, y2: 2 }] } }),
+    ).toBeNull();
+    expect(parseServerMessage({ t: 'notice', seq: 8, tick: 9, d: { text: 'Ramassé : Bandage' } })?.t).toBe(
+      'notice',
+    );
+    expect(parseServerMessage({ t: 'notice', seq: 8, tick: 9, d: { text: '' } })).toBeNull();
+  });
+
+  it('accepte zombies et objets, refuse une santé hors de [0, 1]', () => {
+    const zombie = { ...entity, id: 'z3', kind: 'zombie', name: 'Rôdeur', anim: 'attack', health: 0.4 };
+    const ok = { ...snapshot, d: { ack_seq: 1, entities: [zombie] } };
+    expect(parseServerMessage(ok)).toEqual(ok);
+    expect(
+      parseServerMessage({ ...snapshot, d: { ack_seq: 1, entities: [{ ...zombie, health: 1.5 }] } }),
+    ).toBeNull();
   });
 
   it.each([

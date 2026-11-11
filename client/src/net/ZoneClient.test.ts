@@ -26,8 +26,9 @@ function intentAt(t: number): InputIntent {
     [9000, 0, 1, false], // jusqu'au mur du bas
     [10000, -1, -1, true],
   ];
-  for (const [end, mx, my, sprint] of phases) if (t < end) return { move_x: mx, move_y: my, sprint, aim: 0 };
-  return { move_x: 0, move_y: 0, sprint: false, aim: 0 };
+  for (const [end, mx, my, sprint] of phases)
+    if (t < end) return { move_x: mx, move_y: my, sprint, aim: 0, attack: false };
+  return { move_x: 0, move_y: 0, sprint: false, aim: 0, attack: false };
 }
 
 function run(sim: ZoneSimulation, client: ZoneClient, durationMs: number, frameMs = 1000 / 60) {
@@ -69,7 +70,7 @@ describe('ZoneClient', () => {
     expect(maxFrameJump).toBeLessThanOrEqual(0.25 + 1e-9);
     // Une fois tout acquitté, prédiction et serveur coïncident.
     sim.advanceTo(12000);
-    client.update(12000, { move_x: 0, move_y: 0, sprint: false, aim: 0 });
+    client.update(12000, { move_x: 0, move_y: 0, sprint: false, aim: 0, attack: false });
     const stats = client.getStats(12000);
     expect(stats.position!.x).toBeCloseTo(sim.serverPos.x, 9);
     expect(stats.position!.y).toBeCloseTo(sim.serverPos.y, 9);
