@@ -1,0 +1,119 @@
+/* Thème « terminal de survie usé » : Tailwind v4 + variables de la palette (voir palette.ts). */
+@import 'tailwindcss';
+
+@theme {
+  --color-charcoal-950: #0b0d0c;
+  --color-charcoal-900: #121514;
+  --color-charcoal-800: #1a1e1c;
+  --color-charcoal-700: #262b28;
+  --color-charcoal-600: #353b37;
+  --color-ash: #8a8f86;
+  --color-bone: #c8c5b4;
+  --color-verdigris-300: #9fbfae;
+  --color-verdigris-400: #7fa392;
+  --color-verdigris-500: #5f8a76;
+  --color-verdigris-700: #36564a;
+  --color-rust-400: #c26a45;
+  --color-rust-500: #a64b2a;
+  --color-amber: #c9a14a;
+
+  --font-display: 'Pixelify Sans', 'VT323', monospace;
+  --font-terminal: 'VT323', 'Pixelify Sans', monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-charcoal-950);
+    /* Halo très léger : écran CRT fatigué. */
+    background-image: radial-gradient(ellipse at center, #161a18 0%, var(--color-charcoal-950) 70%);
+    color: var(--color-bone);
+    font-family: var(--font-terminal);
+    font-size: 20px;
+    line-height: 1.25;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+
+  ::selection {
+    background: var(--color-verdigris-700);
+    color: var(--color-bone);
+  }
+
+  :focus-visible {
+    outline: 2px dashed var(--color-verdigris-400);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Lignes de balayage par-dessus toute l'interface. */
+  .scanlines::after {
+    content: '';
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0) 0,
+      rgb(0 0 0 / 0) 2px,
+      rgb(0 0 0 / 0.18) 3px
+    );
+  }
+
+  /* Cadre de terminal : double bordure, coins marqués. */
+  .terminal-frame {
+    position: relative;
+    background: linear-gradient(180deg, var(--color-charcoal-800), var(--color-charcoal-900));
+    border: 2px solid var(--color-charcoal-600);
+    box-shadow:
+      inset 0 0 0 2px var(--color-charcoal-950),
+      inset 0 0 24px rgb(0 0 0 / 0.55),
+      4px 4px 0 0 rgb(0 0 0 / 0.6);
+  }
+
+  .terminal-frame::before,
+  .terminal-frame::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-color: var(--color-verdigris-500);
+    border-style: solid;
+  }
+
+  .terminal-frame::before {
+    top: -2px;
+    left: -2px;
+    border-width: 2px 0 0 2px;
+  }
+
+  .terminal-frame::after {
+    bottom: -2px;
+    right: -2px;
+    border-width: 0 2px 2px 0;
+  }
+
+  .blink {
+    animation: blink 1.1s steps(1, end) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink {
+    animation: none;
+  }
+}

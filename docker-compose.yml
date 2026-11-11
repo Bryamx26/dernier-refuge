@@ -1,0 +1,63 @@
+# Environnement de développement complet : `docker compose up --build`
+# Client : http://localhost:5173 · API : http://localhost:8000/docs
+name: dernier-refuge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: refuge
+      POSTGRES_PASSWORD: refuge
+      POSTGRES_DB: refuge
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U refuge -d refuge"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    environment:
+      DR_ENV: dev
+      DR_DATABASE_URL: postgresql+asyncpg://refuge:refuge@postgres:5432/refuge
+      DR_REDIS_URL: redis://redis:6379/0
+      DR_JWT_SECRET: ${DR_JWT_SECRET:-dev-secret-a-changer-en-production-0123456789}
+      DR_CORS_ORIGINS: '["http://localhost:5173"]'
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  client:
+    build:
+      context: .
+      dockerfile: docker/client.Dockerfile
+    environment:
+      VITE_PROXY_TARGET: http://server:8000
+    ports: ["5173:5173"]
+    volumes:
+      - ./client/src:/srv/client/src
+      - ./assets:/srv/assets:ro
+    depends_on:
+      server: { condition: service_healthy }
+
+volumes:
+  pgdata:

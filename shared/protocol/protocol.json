@@ -1,0 +1,57 @@
+{
+  "$comment": "Source unique du protocole WebSocket. Toute modification passe par l'Architecte, puis `python tools/codegen/generate.py` régénère les types Python et TypeScript. Voir docs/architecture/protocol.md.",
+  "version": 1,
+  "defs": {
+    "ErrorCode": {
+      "description": "Codes d'erreur renvoyés dans le message `error`.",
+      "type": "string",
+      "enum": ["bad_message", "unknown_type", "rate_limited", "internal"]
+    }
+  },
+  "client": {
+    "ping": {
+      "description": "Mesure de latence, envoyé environ une fois par seconde.",
+      "type": "object",
+      "properties": {
+        "client_time": {
+          "description": "Horodatage client en millisecondes (performance.now()).",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["client_time"]
+    }
+  },
+  "server": {
+    "welcome": {
+      "description": "Premier message après l'ouverture du WebSocket.",
+      "type": "object",
+      "properties": {
+        "protocol_version": { "type": "integer", "minimum": 1 },
+        "zone_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "character_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "tick_rate": { "description": "Ticks de simulation par seconde.", "type": "integer", "minimum": 1 },
+        "server_time": { "description": "Horodatage serveur en millisecondes.", "type": "number", "minimum": 0 }
+      },
+      "required": ["protocol_version", "zone_id", "character_id", "tick_rate", "server_time"]
+    },
+    "pong": {
+      "description": "Réponse à `ping`.",
+      "type": "object",
+      "properties": {
+        "client_time": { "type": "number", "minimum": 0 },
+        "server_time": { "type": "number", "minimum": 0 }
+      },
+      "required": ["client_time", "server_time"]
+    },
+    "error": {
+      "description": "Message refusé ou erreur interne. La connexion reste ouverte sauf mention contraire.",
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/defs/ErrorCode" },
+        "message": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["code", "message"]
+    }
+  }
+}
