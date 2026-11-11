@@ -24,7 +24,6 @@ from app.zone import session as session_module
 from app.zone.gateway import MAX_REJECTED_MESSAGES
 from app.zone.manager import ZoneManager
 from app.zone.movement import MovementConfig
-from tests.conftest import DEFAULT_ZONE_SPAWN
 from tests.zone.conftest import TEST_SPAWNS, IssueTicket, NewPlayer, RunDb
 
 ZONE_ID = DEFAULT_ZONE_ID

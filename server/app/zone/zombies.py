@@ -11,8 +11,8 @@
 
 Perception : vue bloquée par les murs, dans un cône `sight_fov_deg` jusqu'à `sight_range`, ou dans
 toutes les directions sous `sense_range`. Une cible déjà poursuivie reste suivie tant qu'elle est en
-vue (sans condition de cône), puis encore `CHASE_MEMORY_S` secondes hors de vue. Ouïe : `hear()` est appelée pour chaque bruit (tirs, coups, pas).
-Hors de vue, la poursuite descend un champ de distances (`DistanceField`) pour contourner les murs.
+vue (sans condition de cône), puis encore `CHASE_MEMORY_S` secondes hors de vue.
+Ouïe : `hear()` est appelée pour chaque bruit (tirs, coups, pas). Hors de vue, la poursuite descend un champ de distances (`DistanceField`) pour contourner les murs.
 """
 
 from __future__ import annotations
