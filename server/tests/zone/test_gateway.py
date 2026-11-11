@@ -43,7 +43,11 @@ def _zones(client: TestClient) -> ZoneManager:
 
 def _input(seq: int, move_x: float = 0.0, move_y: float = 0.0, *, aim: float = 0.0) -> str:
     return json.dumps(
-        {"t": "input", "seq": seq, "d": {"move_x": move_x, "move_y": move_y, "aim": aim, "sprint": False}}
+        {
+            "t": "input",
+            "seq": seq,
+            "d": {"move_x": move_x, "move_y": move_y, "aim": aim, "sprint": False, "attack": False},
+        }
     )
 
 
@@ -67,7 +71,7 @@ class Reader:
         """Prochain message qui n'est pas un snapshot."""
         while True:
             message = self.next()
-            if message["t"] != "snapshot":
+            if message["t"] not in ("snapshot", "vitals", "inventory", "notice", "fx"):
                 return message
 
     def snapshot(self, predicate: Callable[[dict[str, Any]], bool] = lambda d: True) -> dict[str, Any]:
@@ -108,7 +112,7 @@ def test_welcome_snapshot_ping_and_error(zone_client: TestClient, join_ticket: I
         assert welcome["t"] == "welcome"
         assert welcome["seq"] == 1
         d = welcome["d"]
-        assert d["protocol_version"] == PROTOCOL_VERSION == 2
+        assert d["protocol_version"] == PROTOCOL_VERSION == 3
         assert (d["zone_id"], d["character_id"], d["map_id"], d["tick_rate"]) == (
             ZONE_ID,
             character_id,
@@ -118,20 +122,22 @@ def test_welcome_snapshot_ping_and_error(zone_client: TestClient, join_ticket: I
         assert d["entity_id"] and d["server_time"] > 0
         assert _zones(zone_client).online_count(ZONE_ID) == 1
 
-        # Premier snapshot : le joueur lui-même, à sa position enregistrée, sans entrée acquittée.
+        # Premier snapshot : le joueur lui-même, nouveau personnage placé sur un point d'apparition
+        # de la carte (QA-P2-03), sans entrée acquittée.
         snapshot = reader.snapshot()
         assert snapshot["ack_seq"] == 0
-        assert snapshot["entities"] == [
-            {
-                "id": d["entity_id"],
-                "kind": "player",
-                "name": "Alice",
-                "x": DEFAULT_ZONE_SPAWN[0],
-                "y": DEFAULT_ZONE_SPAWN[1],
-                "aim": 0.0,
-                "anim": "idle",
-            }
-        ]
+        [me] = snapshot["entities"]
+        assert (me["x"], me["y"]) in TEST_SPAWNS
+        assert me == {
+            "id": d["entity_id"],
+            "kind": "player",
+            "name": "Alice",
+            "x": me["x"],
+            "y": me["y"],
+            "aim": 0.0,
+            "anim": "idle",
+            "health": 1.0,
+        }
 
         ws.send_text(json.dumps({"t": "ping", "seq": 1, "d": {"client_time": 123.5}}))
         pong = reader.next_other()
@@ -259,13 +265,15 @@ def test_input_is_acknowledged_in_snapshot(zone_client: TestClient, join_ticket:
     with zone_client.websocket_connect(_url(ticket)) as ws:
         reader = Reader(ws)
         assert reader.next()["t"] == "welcome"
+        start = _entity(reader.snapshot(), "Alice")
+        assert start is not None
         for seq in (1, 2, 3, 4):
             ws.send_text(_input(seq, move_x=1.0, aim=0.5))
         snapshot = reader.snapshot(lambda d: d["ack_seq"] == 4)
         me = _entity(snapshot, "Alice")
         assert me is not None
-        assert me["x"] == pytest.approx(DEFAULT_ZONE_SPAWN[0] + 4 * STEP, abs=1e-9)
-        assert me["y"] == DEFAULT_ZONE_SPAWN[1]
+        assert me["x"] == pytest.approx(start["x"] + 4 * STEP, abs=1e-9)
+        assert me["y"] == start["y"]
         assert me["aim"] == 0.5
 
 
@@ -282,19 +290,25 @@ def test_two_clients_see_each_other_move(
         alice_id = alice.next()["d"]["entity_id"]
         bob_id = bob.next()["d"]["entity_id"]
         assert alice_id != bob_id
-        # Chacun voit l'autre (même position d'apparition : bien dans le rayon d'intérêt).
+        # Chacun voit l'autre : on les place au même endroit (les nouveaux personnages
+        # apparaissent sur des points tirés au hasard, parfois hors du rayon d'intérêt).
+        zone = _zones(zone_client).get(ZONE_ID)
+        assert zone is not None
+        for player in zone._players.values():
+            player.x, player.y = TEST_SPAWNS[0]
         seen = alice.snapshot(lambda d: _entity(d, "Bob") is not None)
         assert {e["id"] for e in seen["entities"]} == {alice_id, bob_id}
-        bob.snapshot(lambda d: _entity(d, "Alice") is not None)
+        start = bob.snapshot(lambda d: (e := _entity(d, "Alice")) is not None and e["y"] == TEST_SPAWNS[0][1])
+        start_y = _entity(start, "Alice")["y"]  # type: ignore[index]
 
         for seq in range(1, 6):
             alice_ws.send_text(_input(seq, move_y=-1.0))
         moved = bob.snapshot(
-            lambda d: (e := _entity(d, "Alice")) is not None and e["y"] < DEFAULT_ZONE_SPAWN[1] - 4.5 * STEP
+            lambda d: (e := _entity(d, "Alice")) is not None and e["y"] < start_y - 4.5 * STEP
         )
         alice_seen = _entity(moved, "Alice")
         assert alice_seen is not None and alice_seen["id"] == alice_id
-        assert alice_seen["y"] == pytest.approx(DEFAULT_ZONE_SPAWN[1] - 5 * STEP, abs=1e-9)
+        assert alice_seen["y"] == pytest.approx(start_y - 5 * STEP, abs=1e-9)
         assert alice_seen["anim"] in ("walk", "idle")
 
 
@@ -305,6 +319,8 @@ def test_position_saved_on_disconnect_and_restored(
     with zone_client.websocket_connect(_url(ticket)) as ws:
         reader = Reader(ws)
         assert reader.next()["t"] == "welcome"
+        start = _entity(reader.snapshot(), "Alice")
+        assert start is not None
         for seq in range(1, 9):
             ws.send_text(_input(seq, move_x=1.0, move_y=1.0, aim=1.25))
         final = _entity(reader.snapshot(lambda d: d["ack_seq"] == 8), "Alice")
@@ -318,7 +334,8 @@ def test_position_saved_on_disconnect_and_restored(
     saved = run_db(load)
     assert saved is not None
     assert (saved.x, saved.y, saved.facing) == (final["x"], final["y"], 1.25)
-    assert saved.x > DEFAULT_ZONE_SPAWN[0]
+    assert saved.x > start["x"]
+    assert saved.inventory is not None and saved.inventory["slots"], "inventaire sauvegardé"
 
     ticket, _ = join_ticket()
     with zone_client.websocket_connect(_url(ticket)) as ws:
@@ -337,7 +354,9 @@ def test_position_in_wall_moves_to_nearest_spawn(
     async def move_into_wall(session: AsyncSession) -> None:
         # Bloc solide de la carte de test (tuiles 70..72 × 60..68) ; spawn le plus proche (66,5 ; 64,5).
         await session.execute(
-            update(Character).where(Character.id == uuid.UUID(character_id)).values(x=71.0, y=64.0)
+            update(Character)
+            .where(Character.id == uuid.UUID(character_id))
+            .values(x=71.0, y=64.0, inventory={"equipped": -1, "slots": []})
         )
 
     run_db(move_into_wall)
@@ -372,7 +391,8 @@ def test_slow_client_is_closed_with_4009(
         tick_at_welcome = zone.tick
         ws.receive_json()
     assert info.value.code == 4009
-    # 1 message en cours d'envoi + 8 en file + 1 de trop : ~10 ticks, la zone a continué de tourner.
-    assert zone.tick >= tick_at_welcome + 9
+    # 1 message en cours d'envoi + 8 en file + 1 de trop (snapshots, plus `inventory` et `vitals` au
+    # premier tick) : la zone a continué de tourner pendant plusieurs ticks.
+    assert zone.tick >= tick_at_welcome + 6
     _wait_offline(zone_client)
     assert zone.running

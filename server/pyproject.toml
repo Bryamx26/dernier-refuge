@@ -14,6 +14,7 @@ dependencies = [
     "redis>=5.2",
     "argon2-cffi>=23.1",
     "pyjwt>=2.10",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -25,6 +26,7 @@ dev = [
     "fakeredis>=2.26",
     "ruff>=0.8",
     "mypy>=1.13",
+    "types-pyyaml>=6.0.12.20261111",
 ]
 
 [tool.uv]

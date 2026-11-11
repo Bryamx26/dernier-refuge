@@ -1,0 +1,66 @@
+# Fouille des bâtiments. Le joueur se tient devant la porte d'un bâtiment (calque `buildings` de la
+# carte) et appuie sur E : après `search_s` secondes, il reçoit le butin tiré dans la table du bâtiment.
+# Un bâtiment fouillé est vide pendant `restock_s` secondes (pour tous les joueurs).
+#
+# Tables : `rolls` tirages (min, max), chacun tiré dans `entries` selon `weight` ; `empty_chance` :
+# probabilité qu'un tirage ne donne rien. `qty` : quantité (min, max).
+
+search_s: 3
+search_range: 1.6
+restock_s: 600
+
+# Nom du bâtiment (propriété `name` de l'objet Tiled) → table. Les autres prennent `default`.
+buildings:
+  Pharmacie: pharmacy
+  Épicerie: grocery
+  Boulangerie: grocery
+  Gendarmerie: police
+  Garage Bastide: garage
+  Coopérative agricole: garage
+
+tables:
+  default:
+    rolls: [1, 3]
+    empty_chance: 0.3
+    entries:
+      - {item: canned_beans, weight: 3, qty: [1, 1]}
+      - {item: biscuits, weight: 3, qty: [1, 2]}
+      - {item: water_bottle, weight: 3, qty: [1, 1]}
+      - {item: soda, weight: 2, qty: [1, 2]}
+      - {item: bandage, weight: 2, qty: [1, 2]}
+      - {item: knife, weight: 2, qty: [1, 1]}
+      - {item: baseball_bat, weight: 1, qty: [1, 1]}
+      - {item: ammo_9mm, weight: 1, qty: [4, 10]}
+  grocery:
+    rolls: [2, 4]
+    empty_chance: 0.15
+    entries:
+      - {item: canned_beans, weight: 4, qty: [1, 2]}
+      - {item: biscuits, weight: 4, qty: [1, 3]}
+      - {item: water_bottle, weight: 4, qty: [1, 2]}
+      - {item: soda, weight: 3, qty: [1, 3]}
+      - {item: knife, weight: 1, qty: [1, 1]}
+  pharmacy:
+    rolls: [2, 3]
+    empty_chance: 0.15
+    entries:
+      - {item: bandage, weight: 5, qty: [1, 3]}
+      - {item: first_aid_kit, weight: 2, qty: [1, 1]}
+      - {item: water_bottle, weight: 2, qty: [1, 1]}
+  police:
+    rolls: [1, 3]
+    empty_chance: 0.2
+    entries:
+      - {item: pistol, weight: 2, qty: [1, 1]}
+      - {item: shotgun, weight: 1, qty: [1, 1]}
+      - {item: ammo_9mm, weight: 4, qty: [6, 18]}
+      - {item: ammo_12g, weight: 3, qty: [3, 8]}
+      - {item: bandage, weight: 2, qty: [1, 2]}
+  garage:
+    rolls: [1, 3]
+    empty_chance: 0.25
+    entries:
+      - {item: baseball_bat, weight: 3, qty: [1, 1]}
+      - {item: knife, weight: 2, qty: [1, 1]}
+      - {item: water_bottle, weight: 2, qty: [1, 1]}
+      - {item: ammo_12g, weight: 1, qty: [2, 5]}

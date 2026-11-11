@@ -6,17 +6,29 @@ import asyncio
 import contextlib
 import logging
 import math
+import random
 import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.content.loader import GameContent, load_content
+from app.content.models import ZonePopulation
 from app.protocol.codec import encode_entity, encode_snapshot
-from app.protocol.generated import AnimState, EntityState, InputPayload
-from app.zone.movement import MoveInput, MovementConfig, step
-from app.zone.persistence import PlayerStore, SavedPosition
+from app.protocol.generated import (
+    ActionPayload,
+    AnimState,
+    EntityState,
+    FxPayload,
+    InputPayload,
+    NoticePayload,
+)
+from app.zone.gameplay import VITALS_EVERY, Gameplay, Survivor
+from app.zone.movement import REPO_ROOT, MoveInput, MovementConfig, step
+from app.zone.persistence import PlayerStore, SavedCharacter
 from app.zone.session import ClientSession
+from app.zone.survival import Vitals
 from app.zone.tilemap import ZoneMap
 
 if TYPE_CHECKING:
@@ -73,6 +85,21 @@ class TickStats:
             self.overruns += 1
 
 
+@dataclass(frozen=True, slots=True)
+class CharacterState:
+    """État de jeu persistant d'un personnage, chargé de la base à la connexion.
+
+    `inventory` : JSON décodé de `characters.inventory`, None pour un personnage qui n'est jamais
+    entré dans le monde (il reçoit l'équipement de départ et un point d'apparition tiré au hasard).
+    """
+
+    health: float
+    hunger: float
+    thirst: float
+    bleeding: bool
+    inventory: object | None
+
+
 @dataclass(slots=True)
 class PlayerEntity:
     """Entité d'un joueur connecté. Position en tuiles, `aim` en radians."""
@@ -83,6 +110,7 @@ class PlayerEntity:
     x: float
     y: float
     aim: float
+    survivor: Survivor
     anim: AnimState = "idle"
     # `seq` de la dernière entrée appliquée (0 : aucune).
     ack_seq: int = 0
@@ -93,13 +121,32 @@ class PlayerEntity:
     ticks_alive: int = 0
     inputs_applied: int = 0
 
-    def state(self) -> EntityState:
+    def state(self, max_health: float) -> EntityState:
+        vitals = self.survivor.vitals
         return EntityState(
-            id=self.entity_id, kind="player", name=self.name, x=self.x, y=self.y, aim=self.aim, anim=self.anim
+            id=self.entity_id,
+            kind="player",
+            name=self.name,
+            x=self.x,
+            y=self.y,
+            aim=self.aim,
+            anim="dead" if vitals.dead else self.anim,
+            health=max(0.0, min(1.0, vitals.health / max_health)),
         )
 
-    def saved_position(self) -> SavedPosition:
-        return SavedPosition(character_id=self.character_id, x=self.x, y=self.y, facing=self.aim)
+    def saved(self) -> SavedCharacter:
+        vitals = self.survivor.vitals
+        return SavedCharacter(
+            character_id=self.character_id,
+            x=self.x,
+            y=self.y,
+            facing=self.aim,
+            health=vitals.health,
+            hunger=vitals.hunger,
+            thirst=vitals.thirst,
+            bleeding=vitals.bleeding,
+            inventory=self.survivor.inventory.to_json(),
+        )
 
 
 def _snapshot_builder(ack_seq: int, entities_json: list[str]) -> Callable[[int, int], str]:
@@ -124,6 +171,9 @@ class ZoneRuntime:
         movement: MovementConfig | None = None,
         store: PlayerStore | None = None,
         autosave_interval: float = AUTOSAVE_INTERVAL_S,
+        content: GameContent | None = None,
+        population: ZonePopulation | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.spec = spec
         self.tick = 0
@@ -140,6 +190,15 @@ class ZoneRuntime:
         self._entity_counter = 0
         self._task: asyncio.Task[None] | None = None
         self._autosave_task: asyncio.Task[None] | None = None
+        self.content = content if content is not None else _default_content()
+        self.game = Gameplay(
+            self.content,
+            self.map,
+            self.movement,
+            tick_rate=spec.tick_rate,
+            population=population,
+            rng=rng,
+        )
 
     # --- Cycle de vie -------------------------------------------------------------------------
 
@@ -206,20 +265,48 @@ class ZoneRuntime:
         if self.store is None or not self._players:
             return
         # Copie synchrone (instantané cohérent), puis écriture asynchrone.
-        positions = [player.saved_position() for player in self._players.values()]
+        positions = [player.saved() for player in self._players.values()]
         try:
-            await self.store.save_positions(positions)
+            await self.store.save_characters(positions)
         except Exception:
             logger.exception("zone %s : échec de la sauvegarde de %d positions", self.spec.id, len(positions))
 
     # --- Simulation ---------------------------------------------------------------------------
 
     def _step(self) -> None:
-        """Un pas de simulation : entrées puis snapshots."""
+        """Un pas de simulation : entrées, actions, règles de jeu, puis envois."""
         self.tick += 1
         for character_id, session in self._sessions.items():
-            self._apply_inputs(self._players[character_id], session)
+            player = self._players[character_id]
+            self._apply_inputs(player, session)
+            while session.pending_actions:
+                payload = session.pending_actions.popleft().payload
+                if isinstance(payload, ActionPayload):
+                    self.game.on_action(player, payload)
+        self.game.tick(self._players)
         self._send_snapshots()
+        self._send_game_messages()
+
+    def _send_game_messages(self) -> None:
+        """`vitals`, `inventory`, `notice` (changements du joueur) et `fx` (effets proches)."""
+        radius2 = self.movement.interest_radius**2
+        fx = self.game.fx
+        for character_id, session in self._sessions.items():
+            player = self._players[character_id]
+            s = player.survivor
+            if s.inventory_dirty:
+                s.inventory_dirty = False
+                session.post("inventory", s.inventory.payload())
+            if s.vitals_dirty or self.tick % VITALS_EVERY == 0:
+                s.vitals_dirty = False
+                session.post("vitals", self.game.vitals_payload(s))
+            for text in s.notices:
+                session.post("notice", NoticePayload(text=text))
+            s.notices.clear()
+            if fx:
+                near = [f.event for f in fx if (f.x - player.x) ** 2 + (f.y - player.y) ** 2 <= radius2][:128]
+                if near:
+                    session.post("fx", FxPayload(events=near))
 
     def _apply_inputs(self, player: PlayerEntity, session: ClientSession) -> None:
         """Applique les entrées en file dans la limite du crédit du joueur (anti-accélération).
@@ -245,14 +332,20 @@ class ZoneRuntime:
             payload = envelope.payload
             if not isinstance(payload, InputPayload) or envelope.seq <= player.ack_seq:
                 continue
-            move = MoveInput(payload.move_x, payload.move_y, payload.sprint)
-            x, y = step((player.x, player.y), move, self.map.grid, self.movement, self.dt)
+            dead = player.survivor.vitals.dead
+            if dead:
+                # Un mort ne bouge plus ; ses entrées sont acquittées (le client se recale).
+                x, y = player.x, player.y
+            else:
+                move = MoveInput(payload.move_x, payload.move_y, payload.sprint)
+                x, y = step((player.x, player.y), move, self.map.grid, self.movement, self.dt)
+                player.aim = payload.aim
             last_moved = x != player.x or y != player.y
             last_sprint = payload.sprint
             player.x, player.y = x, y
-            player.aim = payload.aim
             player.ack_seq = envelope.seq
             applied += 1
+            self.game.on_input(player, payload, last_moved)
         player.inputs_applied += applied
         if applied:
             player.idle_ticks = 0
@@ -274,18 +367,21 @@ class ZoneRuntime:
         cell = INTEREST_CELL_SIZE
         radius = self.movement.interest_radius
         radius2 = radius * radius
-        cells: defaultdict[tuple[int, int], list[tuple[PlayerEntity, str]]] = defaultdict(list)
+        max_health = self.content.survival.max_health
+        cells: defaultdict[tuple[int, int], list[tuple[float, float, str]]] = defaultdict(list)
         for player in self._players.values():
             key = (math.floor(player.x / cell), math.floor(player.y / cell))
-            cells[key].append((player, encode_entity(player.state())))
+            cells[key].append((player.x, player.y, encode_entity(player.state(max_health))))
+        for x, y, entity in self.game.world_entities():
+            cells[(math.floor(x / cell), math.floor(y / cell))].append((x, y, encode_entity(entity)))
 
         for character_id, session in self._sessions.items():
             me = self._players[character_id]
             visible: list[str] = []
             for cy in range(math.floor((me.y - radius) / cell), math.floor((me.y + radius) / cell) + 1):
                 for cx in range(math.floor((me.x - radius) / cell), math.floor((me.x + radius) / cell) + 1):
-                    for other, encoded in cells.get((cx, cy), ()):
-                        dx, dy = other.x - me.x, other.y - me.y
+                    for ox, oy, encoded in cells.get((cx, cy), ()):
+                        dx, dy = ox - me.x, oy - me.y
                         if dx * dx + dy * dy <= radius2:
                             visible.append(encoded)
             session.post_encoded(_snapshot_builder(me.ack_seq, visible))
@@ -312,17 +408,31 @@ class ZoneRuntime:
         name: str = "",
         position: tuple[float, float] | None = None,
         aim: float = 0.0,
+        state: CharacterState | None = None,
     ) -> PlayerEntity:
         """Inscrit une session et crée son entité. Lève `AlreadyConnectedError` ou `ZoneFullError`.
 
         L'entité apparaît à `position` si elle est libre, sinon au point d'apparition libre le plus
-        proche (cf. `ZoneMap.resolve_spawn`).
+        proche (cf. `ZoneMap.resolve_spawn`) ; sans position (nouveau personnage), à un point
+        d'apparition libre tiré au hasard. Un personnage sauvegardé mort réapparaît aussitôt.
         """
         if session.character_id in self._sessions:
             raise AlreadyConnectedError(session.character_id)
         if len(self._sessions) >= self.spec.max_players:
             raise ZoneFullError(self.spec.id)
-        x, y = self.map.resolve_spawn(position, self.movement.player_half_size)
+        half = self.movement.player_half_size
+        new_character = state is None or state.inventory is None
+        if state is not None and state.inventory is not None:
+            vitals = Vitals(
+                health=state.health, hunger=state.hunger, thirst=state.thirst, bleeding=state.bleeding
+            )
+            survivor = self.game.new_survivor(state.inventory, vitals)
+        else:
+            survivor = self.game.new_survivor()
+        if position is None or (state is not None and new_character):
+            x, y = self.game.random_spawn(half)
+        else:
+            x, y = self.map.resolve_spawn(position, half)
         self._entity_counter += 1
         player = PlayerEntity(
             entity_id=f"p{self._entity_counter}",
@@ -331,7 +441,10 @@ class ZoneRuntime:
             x=x,
             y=y,
             aim=aim if math.isfinite(aim) else 0.0,
+            survivor=survivor,
         )
+        if survivor.vitals.dead:
+            self.game.respawn(player)
         self._sessions[session.character_id] = session
         self._players[session.character_id] = player
         return player
@@ -342,3 +455,14 @@ class ZoneRuntime:
             return None
         del self._sessions[session.character_id]
         return self._players.pop(session.character_id, None)
+
+
+_DEFAULT_CONTENT: GameContent | None = None
+
+
+def _default_content() -> GameContent:
+    """Contenu du dépôt (`content/`), chargé une fois (zones créées sans `content` : tests unitaires)."""
+    global _DEFAULT_CONTENT
+    if _DEFAULT_CONTENT is None:
+        _DEFAULT_CONTENT = load_content(REPO_ROOT / "content")
+    return _DEFAULT_CONTENT

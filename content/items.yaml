@@ -1,0 +1,110 @@
+# Objets du jeu : armes, munitions, nourriture, boissons, soins.
+# Lu par le serveur au démarrage (validation stricte : server/app/content/). Aucune logique ici.
+#
+# Champs communs :
+#   name    nom affiché (≤ 32 caractères)
+#   kind    melee | firearm | ammo | food | drink | medical
+#   weight  poids d'une unité, en kg
+#   stack   taille maximale d'une pile (1 = non empilable)
+#
+# Armes de mêlée (`melee`) : damage (PV par coup), range (tuiles, depuis le centre du joueur),
+#   arc_deg (ouverture du coup), cooldown_s, durability (coups avant de casser), noise (rayon en tuiles).
+# Armes à feu (`firearm`) : damage (par projectile), pellets (projectiles par tir), range, spread_deg
+#   (dispersion totale), cooldown_s, magazine, ammo (objet consommé), reload_s, durability (tirs), noise.
+# Consommables (`consume`) : hunger, thirst, health (points rendus), stops_bleeding.
+
+unarmed:
+  name: Poings
+  melee: {damage: 6, range: 1.0, arc_deg: 60, cooldown_s: 0.6, durability: 0, noise: 1.5}
+
+items:
+  knife:
+    name: Couteau de cuisine
+    kind: melee
+    weight: 0.3
+    stack: 1
+    melee: {damage: 20, range: 1.1, arc_deg: 70, cooldown_s: 0.45, durability: 150, noise: 2}
+  baseball_bat:
+    name: Batte de baseball
+    kind: melee
+    weight: 1.0
+    stack: 1
+    melee: {damage: 32, range: 1.45, arc_deg: 110, cooldown_s: 0.9, durability: 90, noise: 3}
+  pistol:
+    name: Pistolet 9 mm
+    kind: firearm
+    weight: 0.9
+    stack: 1
+    firearm:
+      damage: 34
+      pellets: 1
+      range: 14
+      spread_deg: 5
+      cooldown_s: 0.35
+      magazine: 12
+      ammo: ammo_9mm
+      reload_s: 1.6
+      durability: 400
+      noise: 22
+  shotgun:
+    name: Fusil à pompe
+    kind: firearm
+    weight: 3.2
+    stack: 1
+    firearm:
+      damage: 14
+      pellets: 7
+      range: 7
+      spread_deg: 22
+      cooldown_s: 1.0
+      magazine: 5
+      ammo: ammo_12g
+      reload_s: 2.6
+      durability: 200
+      noise: 30
+  ammo_9mm:
+    name: Balles 9 mm
+    kind: ammo
+    weight: 0.01
+    stack: 60
+  ammo_12g:
+    name: Cartouches cal. 12
+    kind: ammo
+    weight: 0.04
+    stack: 25
+  canned_beans:
+    name: Conserve de haricots
+    kind: food
+    weight: 0.45
+    stack: 5
+    consume: {hunger: 35}
+  biscuits:
+    name: Paquet de biscuits
+    kind: food
+    weight: 0.2
+    stack: 5
+    consume: {hunger: 15}
+  water_bottle:
+    name: Bouteille d'eau
+    kind: drink
+    weight: 0.6
+    stack: 5
+    consume: {thirst: 40}
+  soda:
+    name: Canette de soda
+    kind: drink
+    weight: 0.35
+    stack: 5
+    consume: {thirst: 20, hunger: 5}
+  bandage:
+    name: Bandage
+    kind: medical
+    weight: 0.05
+    stack: 10
+    consume: {stops_bleeding: true, health: 4}
+  first_aid_kit:
+    name: Trousse de secours
+    kind: medical
+    weight: 0.8
+    stack: 2
+    consume: {stops_bleeding: true, health: 40}

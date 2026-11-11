@@ -26,6 +26,7 @@ from redis.asyncio import Redis
 from app.protocol.codec import ClientEnvelope, ProtocolError, decode_client
 from app.protocol.generated import (
     PROTOCOL_VERSION,
+    ActionPayload,
     ErrorCode,
     ErrorPayload,
     PingPayload,
@@ -33,8 +34,8 @@ from app.protocol.generated import (
     WelcomePayload,
 )
 from app.zone.manager import ZoneManager
-from app.zone.persistence import PlayerStore, SavedPosition, SqlPlayerStore
-from app.zone.runtime import AlreadyConnectedError, ZoneFullError
+from app.zone.persistence import PlayerStore, SavedCharacter, SqlPlayerStore
+from app.zone.runtime import AlreadyConnectedError, CharacterState, ZoneFullError
 from app.zone.session import CLOSE_TOO_SLOW, ClientSession
 from app.zone.tickets import consume_ticket
 
@@ -90,7 +91,17 @@ async def zone_websocket(websocket: WebSocket, zone_id: str, ticket: str = "") -
     session = ClientSession(websocket, character_id=info.character_id, tick_source=lambda: zone.tick)
     try:
         player = zone.register(
-            session, name=character.name, position=(character.x, character.y), aim=character.facing
+            session,
+            name=character.name,
+            position=(character.x, character.y),
+            aim=character.facing,
+            state=CharacterState(
+                health=character.health,
+                hunger=character.hunger,
+                thirst=character.thirst,
+                bleeding=character.bleeding,
+                inventory=character.inventory,
+            ),
         )
     except AlreadyConnectedError:
         await websocket.close(CloseCode.ALREADY_CONNECTED, "personnage déjà connecté")
@@ -124,7 +135,7 @@ async def zone_websocket(websocket: WebSocket, zone_id: str, ticket: str = "") -
             # l'annulation : le serveur peut annuler le gestionnaire dès la déconnexion.
             current = zone.player(session)
             if current is not None:
-                await asyncio.shield(_save_position(store, current.saved_position(), zone_id))
+                await asyncio.shield(_save_character(store, current.saved(), zone_id))
         finally:
             zone.unregister(session)
             try:
@@ -134,9 +145,9 @@ async def zone_websocket(websocket: WebSocket, zone_id: str, ticket: str = "") -
             logger.info("zone %s : déconnexion de %s", zone_id, info.character_id)
 
 
-async def _save_position(store: PlayerStore, position: SavedPosition, zone_id: str) -> None:
+async def _save_character(store: PlayerStore, position: SavedCharacter, zone_id: str) -> None:
     try:
-        await store.save_positions([position])
+        await store.save_characters([position])
     except Exception:
         logger.exception("zone %s : échec de la sauvegarde de %s", zone_id, position.character_id)
 
@@ -185,6 +196,10 @@ def _dispatch(session: ClientSession, envelope: ClientEnvelope) -> None:
     if isinstance(payload, PingPayload):
         # Message de transport : réponse immédiate, hors boucle de simulation.
         session.post("pong", PongPayload(client_time=payload.client_time, server_time=server_time_ms()))
+        return
+    if isinstance(payload, ActionPayload):
+        # Action ponctuelle : traitée par la zone au prochain tick.
+        session.enqueue_action(envelope)
         return
     # Message de jeu (`input`) : appliqué par la zone aux prochains ticks. File bornée : si elle
     # déborde, les entrées les plus anciennes sont jetées (le client les rejouera après ack).

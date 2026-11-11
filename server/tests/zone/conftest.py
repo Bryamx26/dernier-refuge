@@ -103,6 +103,8 @@ def game_data_dir(tmp_path: Path) -> Path:
     (root / "maps" / "valcendre.tmj").write_text(json.dumps(build_test_map()), encoding="utf-8")
     (root / MOVEMENT_FILE).parent.mkdir(parents=True)
     shutil.copy(REPO_ROOT / MOVEMENT_FILE, root / MOVEMENT_FILE)
+    # Contenu de jeu du dépôt, sans peuplement de zone : pas de zombies dans ces tests.
+    shutil.copytree(REPO_ROOT / "content", root / "content", ignore=shutil.ignore_patterns("zones"))
     return root
 
 

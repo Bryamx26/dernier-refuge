@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.content.loader import CONTENT_DIR, load_content
 from app.zone.movement import MOVEMENT_FILE, REPO_ROOT, MovementConfig
 from app.zone.persistence import PlayerStore
 from app.zone.runtime import ZoneRuntime
@@ -31,7 +32,7 @@ class ZoneSpec:
 class ZoneManager:
     """Démarre une `ZoneRuntime` (et donc une boucle de tick) par zone.
 
-    `data_dir` est la racine des données de jeu (`maps/`, `shared/movement/movement.json`) ;
+    `data_dir` est la racine des données de jeu (`maps/`, `content/`, `shared/movement/movement.json`) ;
     par défaut la racine du dépôt. Si `allow_missing_maps` est vrai (environnement de test
     uniquement), une carte absente est remplacée par une carte vide ouverte de 128 × 128 tuiles ;
     sinon le démarrage échoue avec `MapLoadError`.
@@ -61,12 +62,24 @@ class ZoneManager:
     async def start(self, specs: list[ZoneSpec]) -> None:
         """Charge toutes les cartes (échec immédiat si l'une manque) puis lance les zones."""
         movement = MovementConfig.load(self.data_dir / MOVEMENT_FILE)
+        # Contenu de jeu : `content/` des données de jeu, à défaut celui du dépôt.
+        content_dir = self.data_dir / CONTENT_DIR
+        content = load_content(content_dir if content_dir.exists() else REPO_ROOT / CONTENT_DIR)
         runtimes: list[ZoneRuntime] = []
         for spec in specs:
             if spec.id in self._zones or any(r.spec.id == spec.id for r in runtimes):
                 raise ValueError(f"zone {spec.id} déjà démarrée")
             zone_map = self._load_map(spec)
-            runtimes.append(ZoneRuntime(spec, zone_map=zone_map, movement=movement, store=self.store))
+            runtimes.append(
+                ZoneRuntime(
+                    spec,
+                    zone_map=zone_map,
+                    movement=movement,
+                    store=self.store,
+                    content=content,
+                    population=content.population(spec.id),
+                )
+            )
         for runtime in runtimes:
             runtime.start()
             self._zones[runtime.spec.id] = runtime
