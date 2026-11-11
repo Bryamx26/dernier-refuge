@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Contrats (codegen à jour)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python tools/codegen/generate.py --check
+
+  server:
+    name: Serveur (lint, types, tests, migrations)
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: server }
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: refuge
+          POSTGRES_PASSWORD: refuge
+          POSTGRES_DB: refuge_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U refuge" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DR_TEST_DATABASE_URL: postgresql+asyncpg://refuge:refuge@localhost:5432/refuge_test
+      DR_DATABASE_URL: postgresql+asyncpg://refuge:refuge@localhost:5432/refuge_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "0.11.32" }
+      - run: uv python install 3.12
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: uv run pytest -q
+
+  client:
+    name: Client (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: client }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
