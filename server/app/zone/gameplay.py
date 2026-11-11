@@ -125,6 +125,7 @@ class Gameplay:
         self.buildings = [
             Building(info=b, table=content.loot.buildings.get(b.name, "default")) for b in zone_map.buildings
         ]
+        # Effets du tick ; vidés par la zone après envoi (`ZoneRuntime._send_game_messages`).
         self.fx: list[PositionedFx] = []
         self._noises: list[tuple[float, float, float]] = []
         self._fields: dict[str, tuple[int, DistanceField]] = {}
@@ -169,6 +170,11 @@ class Gameplay:
         for starter in self.content.survival.starter_kit:
             item = self.content.items.items[starter.item]
             inventory.add(new_stack(starter.item, item, starter.qty))
+        # L'arme de départ est en main.
+        for index, stack in sorted(inventory.slots.items()):
+            if self.content.items.items[stack.item].kind in ("melee", "firearm"):
+                inventory.equipped = index
+                break
 
     def random_spawn(self, half: float) -> tuple[float, float]:
         """Point d'apparition libre tiré au hasard (QA-P2-03 : les nouveaux joueurs ne s'empilent plus)."""
@@ -492,7 +498,6 @@ class Gameplay:
 
     def tick(self, players: dict[str, PlayerEntity]) -> None:
         self.tick_count += 1
-        self.fx.clear()
         survival = self.content.survival
         noise = self.content.zombies.player_noise
         targets: dict[str, _TargetView] = {}

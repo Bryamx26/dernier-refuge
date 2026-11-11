@@ -197,6 +197,16 @@ class ZombieBrain:
         self.rng = rng
         self.dt = dt
         self._configs: dict[tuple[float, float], MovementConfig] = {}
+        # Champs de distances vers le point d'origine de chaque zombie (retour en contournant les murs).
+        self._home_fields: dict[tuple[int, int, int], DistanceField] = {}
+
+    def _home_field(self, z: Zombie) -> DistanceField:
+        key = (math.floor(z.home[0]), math.floor(z.home[1]), math.ceil(z.kind.leash_radius) + 4)
+        field = self._home_fields.get(key)
+        if field is None:
+            field = DistanceField(self.grid, key[0], key[1], key[2])
+            self._home_fields[key] = field
+        return field
 
     def _config(self, speed: float, half: float) -> MovementConfig:
         key = (speed, half)
@@ -329,7 +339,13 @@ class ZombieBrain:
             return
 
         if z.state == "return":
-            if self._go(z, z.home, k.wander_speed * RETURN_FACTOR, settle=True):
+            goal = z.home
+            if not line_of_sight(self.grid, z.x, z.y, z.home[0], z.home[1]):
+                nxt = self._home_field(z).next_tile(math.floor(z.x), math.floor(z.y))
+                if nxt is not None:
+                    goal = (nxt[0] + 0.5, nxt[1] + 0.5)
+            arrived = self._go(z, goal, k.wander_speed * RETURN_FACTOR) and goal == z.home
+            if arrived or (z.x - z.home[0]) ** 2 + (z.y - z.home[1]) ** 2 <= ARRIVAL * ARRIVAL * 4:
                 z.state, z.goal, z.timer = "wander", None, self.rng.uniform(1, 4)
             return
 
@@ -346,9 +362,8 @@ class ZombieBrain:
             z.goal = None
             z.timer = self.rng.uniform(2, 6)
 
-    def _go(self, z: Zombie, goal: tuple[float, float], speed: float, *, settle: bool = False) -> bool:
-        """Avance vers `goal` ; True si arrivé ou bloqué (abandon). `settle` : un zombie bloqué en
-        rentrant s'installe là où il est (nouvelle origine)."""
+    def _go(self, z: Zombie, goal: tuple[float, float], speed: float) -> bool:
+        """Avance vers `goal` ; True si arrivé ou bloqué (abandon)."""
         if (goal[0] - z.x) ** 2 + (goal[1] - z.y) ** 2 <= ARRIVAL * ARRIVAL:
             z.anim = "idle"
             return True
@@ -359,8 +374,6 @@ class ZombieBrain:
         z.stuck += self.dt
         if z.stuck >= STUCK_AFTER_S:
             z.stuck = 0.0
-            if settle:
-                z.home = (z.x, z.y)
             return True
         return False
 

@@ -521,3 +521,21 @@ def test_honest_client_catches_up_after_network_freeze() -> None:
         zone._step()
     assert player.ack_seq == seq
     assert not session.pending_inputs
+
+
+async def test_attack_fx_and_game_messages_reach_the_client() -> None:
+    """Régression : les effets émis pendant les entrées (coup) sont envoyés, puis vidés."""
+    zone = _zone()
+    socket = FakeWebSocket()
+    session = ClientSession(cast(WebSocket, socket), character_id="c1", tick_source=lambda: zone.tick)
+    player = zone.register(session, position=(10.0, 10.0))
+    assert player.survivor.inventory.equipped >= 0, "arme de départ en main"
+    session.enqueue_input(
+        ClientEnvelope(
+            t="input", seq=1, payload=InputPayload(move_x=0, move_y=0, aim=0.0, sprint=False, attack=True)
+        )
+    )
+    zone._step()
+    kinds = [json.loads(text)["t"] for text in session.drain_outbox()]
+    assert {"snapshot", "inventory", "vitals", "fx"} <= set(kinds)
+    assert zone.game.fx == []

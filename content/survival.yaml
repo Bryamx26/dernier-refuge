@@ -19,6 +19,7 @@ max_weight: 18
 
 # Équipement de départ (nouveau personnage et réapparition après la mort).
 starter_kit:
+  - {item: knife, qty: 1}
   - {item: water_bottle, qty: 1}
   - {item: biscuits, qty: 1}
   - {item: bandage, qty: 1}

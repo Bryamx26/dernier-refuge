@@ -353,14 +353,54 @@ WALK_FPS = 8
 RUN_FPS = 12
 
 
-def build_character(ld: Loader, name: str, row0: int, desc: str) -> tuple[bytes, bytes]:
+# --- Zombies : personnages du RPG Urban Pack recolorés (dérivés CC0) -------------------------------
+# Peau verdâtre et livide, vêtements délavés et salis, quelques taches sombres.
+ZOMBIES = {
+    "zombie_rodeur": (3, "rôdeur : ancien employé en chemise orange, peau livide"),
+}
+
+
+def _zombify(img: Image.Image) -> Image.Image:
+    out = img.copy()
+    px = out.load()
+    assert px is not None
+    for y in range(TILE):
+        for x in range(TILE):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            lum = (r * 299 + g * 587 + b * 114) // 1000
+            if r > g > b and r - b > 50 and lum > 150:
+                # Peau : vert-de-gris livide.
+                px[x, y] = (int(lum * 0.62), int(lum * 0.82), int(lum * 0.55), a)
+            else:
+                # Vêtements, cheveux : désaturés et assombris, léger virage boueux.
+                gray = lum * 0.55
+                px[x, y] = (
+                    int(gray + (r - lum) * 0.35 + 6),
+                    int(gray + (g - lum) * 0.35 + 4),
+                    int(gray + (b - lum) * 0.35),
+                    a,
+                )
+    # Taches de sang séché, à des positions fixes (déterministe) sur le torse.
+    for x, y in ((6, 9), (9, 10), (7, 11)):
+        r, g, b, a = px[x, y]
+        if a:
+            px[x, y] = (92, 22, 20, a)
+    return out
+
+
+def build_character(
+    ld: Loader, name: str, row0: int, desc: str, recolor: Callable[[Image.Image], Image.Image] | None = None
+) -> tuple[bytes, bytes]:
     sheet = Image.new("RGBA", (3 * TILE, 4 * TILE), (0, 0, 0, 0))
     src_ids: list[int] = []
     for r, direction in enumerate(DIRECTIONS):
         for f in range(3):
             idx = (row0 + f) * URBAN_COLUMNS + CHAR_COL0 + CHAR_SRC_COL[direction]
             src_ids.append(idx)
-            sheet.alpha_composite(ld.tile(URBAN, idx), (f * TILE, r * TILE))
+            tile = ld.tile(URBAN, idx)
+            sheet.alpha_composite(recolor(tile) if recolor else tile, (f * TILE, r * TILE))
     anims: dict[str, dict[str, object]] = {}
     for r, direction in enumerate(DIRECTIONS):
         stand, a, b = r * 3, r * 3 + 1, r * 3 + 2
@@ -396,6 +436,10 @@ def _json_bytes(data: object) -> bytes:
     return (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
+# Objet au sol : carton ouvert du RPG Urban Pack.
+LOOT_TILE = 274
+
+
 def outputs(src: Path) -> dict[Path, bytes]:
     ld = Loader(src)
     png, meta = build_tileset(ld)
@@ -404,6 +448,11 @@ def outputs(src: Path) -> dict[Path, bytes]:
         png, meta = build_character(ld, name, row0, desc)
         out[SPRITES_DIR / f"{name}.png"] = png
         out[SPRITES_DIR / f"{name}.json"] = meta
+    for name, (row0, desc) in ZOMBIES.items():
+        png, meta = build_character(ld, name, row0, desc, _zombify)
+        out[SPRITES_DIR / f"{name}.png"] = png
+        out[SPRITES_DIR / f"{name}.json"] = meta
+    out[SPRITES_DIR / "loot.png"] = _png_bytes(ld.tile(URBAN, LOOT_TILE))
     return out
 
 

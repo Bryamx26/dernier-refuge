@@ -307,6 +307,7 @@ class ZoneRuntime:
                 near = [f.event for f in fx if (f.x - player.x) ** 2 + (f.y - player.y) ** 2 <= radius2][:128]
                 if near:
                     session.post("fx", FxPayload(events=near))
+        fx.clear()
 
     def _apply_inputs(self, player: PlayerEntity, session: ClientSession) -> None:
         """Applique les entrées en file dans la limite du crédit du joueur (anti-accélération).

@@ -1,6 +1,6 @@
 // Interpolation des entités distantes : on affiche le monde avec un retard fixe (100 ms) pour
 // toujours disposer de deux snapshots encadrants. Logique pure, horloges injectées en millisecondes.
-import type { AnimState, EntityState } from '../generated/protocol';
+import type { AnimState, EntityKind, EntityState } from '../generated/protocol';
 
 export const INTERPOLATION_DELAY_MS = 100;
 /** Historique conservé par entité. */
@@ -16,10 +16,14 @@ interface Sample {
   readonly aim: number;
   readonly anim: AnimState;
   readonly name: string;
+  readonly kind: EntityKind;
+  readonly health: number;
 }
 
 export interface RemoteEntityView {
   readonly id: string;
+  readonly kind: EntityKind;
+  readonly health: number;
   readonly name: string;
   readonly x: number;
   readonly y: number;
@@ -74,7 +78,16 @@ export class InterpolationBuffer {
       const last = buffer[buffer.length - 1];
       // Snapshot dupliqué ou réordonné : ignoré.
       if (last && t <= last.t) continue;
-      buffer.push({ t, x: e.x, y: e.y, aim: e.aim, anim: e.anim, name: e.name });
+      buffer.push({
+        t,
+        x: e.x,
+        y: e.y,
+        aim: e.aim,
+        anim: e.anim,
+        name: e.name,
+        kind: e.kind,
+        health: e.health,
+      });
       while (buffer.length > 2 && buffer[0]!.t < t - BUFFER_SPAN_MS) buffer.shift();
     }
     for (const id of [...this.buffers.keys()]) if (!seen.has(id)) this.buffers.delete(id);
@@ -117,6 +130,8 @@ function sampleBuffer(id: string, buffer: readonly Sample[], rt: number): Remote
   const k = (rt - a.t) / (b.t - a.t);
   return {
     id,
+    kind: b.kind,
+    health: b.health,
     name: b.name,
     x: a.x + (b.x - a.x) * k,
     y: a.y + (b.y - a.y) * k,
@@ -126,5 +141,5 @@ function sampleBuffer(id: string, buffer: readonly Sample[], rt: number): Remote
 }
 
 function toView(id: string, s: Sample): RemoteEntityView {
-  return { id, name: s.name, x: s.x, y: s.y, aim: s.aim, anim: s.anim };
+  return { id, kind: s.kind, health: s.health, name: s.name, x: s.x, y: s.y, aim: s.aim, anim: s.anim };
 }

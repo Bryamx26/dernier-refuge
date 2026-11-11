@@ -417,3 +417,14 @@ def test_real_zone_tick_cost_with_zombies() -> None:
     mean_ms = (time.perf_counter() - started) * 1000 / (10 * TICK_RATE)
     assert sum(z.state == "chase" for z in game.zombies) > 0
     assert mean_ms < 10, f"{mean_ms:.2f} ms par tick"
+
+
+def test_zombie_returns_home_around_wall() -> None:
+    """Un zombie qui rentre contourne le mur au lieu de rester bloqué (et de s'installer ailleurs)."""
+    game = _game()
+    zombie = _zombie(game, 25.5, 12.5)
+    zombie.x, zombie.y = 15.5, 12.5  # de l'autre côté du mur x = 20
+    zombie.state, zombie.goal = "return", zombie.home
+    _run(game, {}, 25.0)
+    assert zombie.home == (25.5, 12.5)
+    assert math.hypot(zombie.x - 25.5, zombie.y - 12.5) < 6
