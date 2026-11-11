@@ -17,7 +17,13 @@ from app.protocol.generated import InputPayload, PingPayload, SnapshotPayload
 from app.zone.manager import ZoneManager, ZoneSpec
 from app.zone.movement import CollisionGrid, MovementConfig
 from app.zone.persistence import CharacterRecord, SavedPosition
-from app.zone.runtime import AlreadyConnectedError, PlayerEntity, ZoneFullError, ZoneRuntime
+from app.zone.runtime import (
+    INPUT_CATCHUP_MARGIN,
+    AlreadyConnectedError,
+    PlayerEntity,
+    ZoneFullError,
+    ZoneRuntime,
+)
 from app.zone.session import MAX_PENDING_INPUTS, ClientSession, TokenBucket
 from app.zone.tilemap import MapLoadError, ZoneMap
 
@@ -471,3 +477,40 @@ def test_tick_performance_50_players() -> None:
     print(f"\ntick moyen, 50 joueurs se voyant tous : {mean_ms:.3f} ms")
     # Budget : 50 ms par tick à 20 Hz ; marge très large pour les CI lentes.
     assert mean_ms < 25.0
+
+
+def test_sustained_burst_is_bounded_by_cumulative_budget() -> None:
+    """QA-P2-01 : 3 entrées par tick en continu ne dépassent pas ticks écoulés + marge."""
+    zone = _zone()
+    session = _session("c1")
+    player = zone.register(session, position=(10.0, 10.0))
+    seq = 0
+    for _ in range(60):
+        for _ in range(3):
+            seq += 1
+            session.enqueue_input(_input(seq, 0.0, 0.0))
+        zone._step()
+    assert player.inputs_applied == 60 + INPUT_CATCHUP_MARGIN
+
+
+def test_honest_client_catches_up_after_network_freeze() -> None:
+    """QA-P2-08 : après 1 s sans rien recevoir, les 20 entrées en retard sont rattrapées."""
+    zone = _zone()
+    session = _session("c1")
+    player = zone.register(session, position=(10.0, 10.0))
+    seq = 0
+    for _ in range(20):  # une entrée par tick
+        seq += 1
+        session.enqueue_input(_input(seq, 0.0, 0.0))
+        zone._step()
+    for _ in range(20):  # gel : rien n'arrive
+        zone._step()
+    for _ in range(20):  # tout arrive d'un coup
+        seq += 1
+        session.enqueue_input(_input(seq, 0.0, 0.0))
+    for _ in range(10):  # puis le client reprend son rythme
+        seq += 1
+        session.enqueue_input(_input(seq, 0.0, 0.0))
+        zone._step()
+    assert player.ack_seq == seq
+    assert not session.pending_inputs

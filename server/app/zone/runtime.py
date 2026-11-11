@@ -32,6 +32,8 @@ CLOSE_GOING_AWAY = 1001
 INTEREST_CELL_SIZE = 16
 # Sans entrée appliquée pendant ce nombre de ticks, un joueur repasse en animation `idle`
 # (tolère la gigue réseau : un tick sans entrée suivi d'un tick à deux entrées).
+# Avance maximale (en entrées) qu'un joueur peut prendre sur l'horloge du serveur : 1 s à 20 Hz.
+INPUT_CATCHUP_MARGIN = 20
 IDLE_AFTER_TICKS = 4
 # Période de la sauvegarde automatique des positions, en secondes.
 AUTOSAVE_INTERVAL_S = 30.0
@@ -86,6 +88,10 @@ class PlayerEntity:
     ack_seq: int = 0
     # Ticks consécutifs sans entrée appliquée.
     idle_ticks: int = 0
+    # Budget cumulé d'entrées (anti-accélération) : depuis l'arrivée du joueur, le nombre
+    # d'entrées appliquées ne dépasse jamais `ticks_alive + INPUT_CATCHUP_MARGIN`.
+    ticks_alive: int = 0
+    inputs_applied: int = 0
 
     def state(self) -> EntityState:
         return EntityState(
@@ -216,16 +222,25 @@ class ZoneRuntime:
         self._send_snapshots()
 
     def _apply_inputs(self, player: PlayerEntity, session: ClientSession) -> None:
-        """Applique au plus `max_inputs_per_tick` entrées (anti-accélération) ; le reste attend.
+        """Applique les entrées en file dans la limite du crédit du joueur (anti-accélération).
+
+        Au plus `max_inputs_per_tick` entrées par tick, et jamais plus de `ticks_alive +
+        INPUT_CATCHUP_MARGIN` entrées depuis l'arrivée du joueur : un client honnête rattrape un gel
+        réseau (jusqu'à la marge), un tricheur reste à un pas par tick en moyenne.
 
         Une entrée dont le `seq` n'est pas strictement supérieur au dernier appliqué (doublon,
         désordre) est ignorée sans compter dans la limite.
         """
         queue = session.pending_inputs
+        player.ticks_alive += 1
+        budget = min(
+            self.movement.max_inputs_per_tick,
+            player.ticks_alive + INPUT_CATCHUP_MARGIN - player.inputs_applied,
+        )
         applied = 0
         last_moved = False
         last_sprint = False
-        while applied < self.movement.max_inputs_per_tick and queue:
+        while applied < budget and queue:
             envelope = queue.popleft()
             payload = envelope.payload
             if not isinstance(payload, InputPayload) or envelope.seq <= player.ack_seq:
@@ -238,6 +253,7 @@ class ZoneRuntime:
             player.aim = payload.aim
             player.ack_seq = envelope.seq
             applied += 1
+        player.inputs_applied += applied
         if applied:
             player.idle_ticks = 0
             player.anim = ("run" if last_sprint else "walk") if last_moved else "idle"

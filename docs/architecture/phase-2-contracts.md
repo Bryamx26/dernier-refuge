@@ -36,8 +36,9 @@ d'un mur, bord de carte, entrée hors bornes. Le serveur ET le client exécutent
 1e-9 tuile.
 
 Côté serveur, à chaque tick et pour chaque joueur, au plus `max_inputs_per_tick` entrées en file sont
-appliquées (anti-accélération) ; l'excédent reste en file (file bornée à 64, au-delà les plus anciennes
-sont jetées).
+appliquées, et depuis l'arrivée du joueur jamais plus de `ticks écoulés + 20` entrées (budget cumulé,
+anti-accélération, ajouté après la QA) ; l'excédent reste en file (file bornée à 64, au-delà les plus
+anciennes sont jetées).
 
 ## Carte (`maps/valcendre.tmj`, format JSON Tiled, généré par `tools/mapgen/`)
 
