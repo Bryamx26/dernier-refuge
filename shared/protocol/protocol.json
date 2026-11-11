@@ -1,11 +1,68 @@
 {
   "$comment": "Source unique du protocole WebSocket. Toute modification passe par l'Architecte, puis `python tools/codegen/generate.py` régénère les types Python et TypeScript. Voir docs/architecture/protocol.md.",
-  "version": 1,
+  "version": 2,
   "defs": {
     "ErrorCode": {
       "description": "Codes d'erreur renvoyés dans le message `error`.",
       "type": "string",
-      "enum": ["bad_message", "unknown_type", "rate_limited", "internal"]
+      "enum": [
+        "bad_message",
+        "unknown_type",
+        "rate_limited",
+        "internal"
+      ]
+    },
+    "AnimState": {
+      "description": "État d'animation d'une entité.",
+      "type": "string",
+      "enum": [
+        "idle",
+        "walk",
+        "run"
+      ]
+    },
+    "EntityState": {
+      "description": "État d'une entité visible dans un snapshot. Positions en tuiles, angle en radians.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "player"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "aim": {
+          "description": "Orientation en radians (0 = vers la droite, sens horaire écran).",
+          "type": "number"
+        },
+        "anim": {
+          "$ref": "#/defs/AnimState"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "x",
+        "y",
+        "aim",
+        "anim"
+      ]
     }
   },
   "client": {
@@ -19,7 +76,42 @@
           "minimum": 0
         }
       },
-      "required": ["client_time"]
+      "required": [
+        "client_time"
+      ]
+    },
+    "input": {
+      "description": "Entrée de déplacement pour UN pas de simulation (1/tick_rate s). Envoyé à tick_rate Hz. Le `seq` de l'enveloppe sert de numéro d'entrée pour la réconciliation.",
+      "type": "object",
+      "properties": {
+        "move_x": {
+          "description": "Axe horizontal, -1 (gauche) à 1 (droite).",
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "move_y": {
+          "description": "Axe vertical, -1 (haut) à 1 (bas).",
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "aim": {
+          "description": "Orientation souhaitée en radians.",
+          "type": "number",
+          "minimum": -7,
+          "maximum": 7
+        },
+        "sprint": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "move_x",
+        "move_y",
+        "aim",
+        "sprint"
+      ]
     }
   },
   "server": {
@@ -27,31 +119,108 @@
       "description": "Premier message après l'ouverture du WebSocket.",
       "type": "object",
       "properties": {
-        "protocol_version": { "type": "integer", "minimum": 1 },
-        "zone_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "character_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "tick_rate": { "description": "Ticks de simulation par seconde.", "type": "integer", "minimum": 1 },
-        "server_time": { "description": "Horodatage serveur en millisecondes.", "type": "number", "minimum": 0 }
+        "protocol_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "zone_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "character_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "tick_rate": {
+          "description": "Ticks de simulation par seconde.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "server_time": {
+          "description": "Horodatage serveur en millisecondes.",
+          "type": "number",
+          "minimum": 0
+        },
+        "entity_id": {
+          "description": "Identifiant de l'entité du joueur dans les snapshots.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "map_id": {
+          "description": "Carte de la zone, chargée depuis /game/maps/<map_id>.tmj.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
       },
-      "required": ["protocol_version", "zone_id", "character_id", "tick_rate", "server_time"]
+      "required": [
+        "protocol_version",
+        "zone_id",
+        "character_id",
+        "tick_rate",
+        "server_time",
+        "entity_id",
+        "map_id"
+      ]
+    },
+    "snapshot": {
+      "description": "État des entités proches du joueur, envoyé à chaque tick. Une entité absente du snapshot n'est plus visible.",
+      "type": "object",
+      "properties": {
+        "ack_seq": {
+          "description": "`seq` de la dernière entrée du joueur appliquée par le serveur (0 si aucune).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/defs/EntityState"
+          }
+        }
+      },
+      "required": [
+        "ack_seq",
+        "entities"
+      ]
     },
     "pong": {
       "description": "Réponse à `ping`.",
       "type": "object",
       "properties": {
-        "client_time": { "type": "number", "minimum": 0 },
-        "server_time": { "type": "number", "minimum": 0 }
+        "client_time": {
+          "type": "number",
+          "minimum": 0
+        },
+        "server_time": {
+          "type": "number",
+          "minimum": 0
+        }
       },
-      "required": ["client_time", "server_time"]
+      "required": [
+        "client_time",
+        "server_time"
+      ]
     },
     "error": {
       "description": "Message refusé ou erreur interne. La connexion reste ouverte sauf mention contraire.",
       "type": "object",
       "properties": {
-        "code": { "$ref": "#/defs/ErrorCode" },
-        "message": { "type": "string", "maxLength": 200 }
+        "code": {
+          "$ref": "#/defs/ErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 200
+        }
       },
-      "required": ["code", "message"]
+      "required": [
+        "code",
+        "message"
+      ]
     }
   }
 }

@@ -138,12 +138,20 @@ export class ZoneSocket {
 
   /** Envoie un message client typé ; `seq` croît à chaque envoi. Renvoie false si la connexion n'est pas ouverte. */
   send<K extends ClientMessageType>(t: K, d: ClientPayloads[K]): boolean {
+    return this.sendWithSeq(t, d) !== null;
+  }
+
+  /**
+   * Comme `send`, mais renvoie le `seq` attribué (null si non envoyé). Le `seq` d'un `input` est son
+   * numéro pour la réconciliation : il est partagé avec les pings, donc croissant mais pas contigu.
+   */
+  sendWithSeq<K extends ClientMessageType>(t: K, d: ClientPayloads[K]): number | null {
     const socket = this.socket;
-    if (!socket || this.status.state !== 'open' || socket.readyState !== WS_OPEN) return false;
+    if (!socket || this.status.state !== 'open' || socket.readyState !== WS_OPEN) return null;
     this.seq += 1;
     const message = { t, seq: this.seq, d } as ClientMessage;
     socket.send(JSON.stringify(message));
-    return true;
+    return this.seq;
   }
 
   /** S'abonne à un type de message serveur. Renvoie la fonction de désabonnement. */

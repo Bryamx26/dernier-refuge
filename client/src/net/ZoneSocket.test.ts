@@ -34,7 +34,15 @@ const welcome = {
   t: 'welcome',
   seq: 1,
   tick: 42,
-  d: { protocol_version: 1, zone_id: 'valcendre', character_id: 'c1', tick_rate: 20, server_time: 99 },
+  d: {
+    protocol_version: 2,
+    zone_id: 'valcendre',
+    character_id: 'c1',
+    tick_rate: 20,
+    server_time: 99,
+    entity_id: 'e1',
+    map_id: 'valcendre',
+  },
 };
 
 describe('ZoneSocket', () => {
@@ -102,9 +110,10 @@ describe('ZoneSocket', () => {
     socket.on('error', onAny);
     ws.serverOpen();
     ws.serverSend({ t: 'snapshot', seq: 9, tick: 1, d: {} });
+    ws.serverSend({ t: 'teleport', seq: 10, tick: 1, d: {} });
     ws.serverSend('pas du json');
     expect(onAny).not.toHaveBeenCalled();
-    expect(socket.ignoredFrames).toBe(2);
+    expect(socket.ignoredFrames).toBe(3);
     expect(socket.getStatus().state).toBe('open');
   });
 

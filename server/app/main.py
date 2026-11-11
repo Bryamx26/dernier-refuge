@@ -22,6 +22,7 @@ from app.db.session import create_engine, create_sessionmaker
 from app.redis_client import create_redis
 from app.zone.gateway import router as zone_router
 from app.zone.manager import ZoneManager, ZoneSpec
+from app.zone.persistence import SqlPlayerStore
 
 
 async def load_zone_specs(sessionmaker: async_sessionmaker[AsyncSession], tick_rate: int) -> list[ZoneSpec]:
@@ -29,7 +30,13 @@ async def load_zone_specs(sessionmaker: async_sessionmaker[AsyncSession], tick_r
     async with sessionmaker() as session:
         rows = await session.scalars(select(Zone).order_by(Zone.id))
         return [
-            ZoneSpec(id=zone.id, name=zone.name, max_players=zone.max_players, tick_rate=tick_rate)
+            ZoneSpec(
+                id=zone.id,
+                name=zone.name,
+                max_players=zone.max_players,
+                tick_rate=tick_rate,
+                map_file=zone.map_file,
+            )
             for zone in rows
         ]
 
@@ -60,7 +67,12 @@ def create_app(
                 stack.push_async_callback(redis_client.aclose)
 
             sessionmaker = create_sessionmaker(db_engine)
-            zone_manager = ZoneManager()
+            # Une carte absente fait échouer le démarrage, sauf en test (carte vide de repli).
+            zone_manager = ZoneManager(
+                store=SqlPlayerStore(sessionmaker),
+                data_dir=app_settings.game_data_dir,
+                allow_missing_maps=app_settings.env == "test",
+            )
             app.state.settings = app_settings
             app.state.engine = db_engine
             app.state.sessionmaker = sessionmaker

@@ -17,8 +17,9 @@
   --color-rust-500: #a64b2a;
   --color-amber: #c9a14a;
 
-  --font-display: 'Pixelify Sans', 'VT323', monospace;
-  --font-terminal: 'VT323', 'Pixelify Sans', monospace;
+  /* Silkscreen : police pixel des titres, au « Z » sans ambiguïté (Pixelify Sans le faisait ressembler à un « 2 »). */
+  --font-display: 'Silkscreen', 'VT323', monospace;
+  --font-terminal: 'VT323', monospace;
 }
 
 @layer base {

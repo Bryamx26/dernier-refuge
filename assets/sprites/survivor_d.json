@@ -1,0 +1,152 @@
+{
+  "_comment": "AUTO-GÉNÉRÉ par tools/assets/build_assets.py. Ne pas modifier.",
+  "image": "survivor_d.png",
+  "description": "vieil homme barbu aux cheveux gris",
+  "frameWidth": 16,
+  "frameHeight": 16,
+  "columns": 3,
+  "rows": 4,
+  "frameOrder": "index = ligne * 3 + colonne ; ligne = direction (down, left, right, up), colonne = image (0 immobile, 1 marche A, 2 marche B)",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "animations": {
+    "idle_down": {
+      "frames": [
+        0
+      ],
+      "fps": 1,
+      "loop": true
+    },
+    "walk_down": {
+      "frames": [
+        1,
+        0,
+        2,
+        0
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "run_down": {
+      "frames": [
+        1,
+        0,
+        2,
+        0
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "idle_left": {
+      "frames": [
+        3
+      ],
+      "fps": 1,
+      "loop": true
+    },
+    "walk_left": {
+      "frames": [
+        4,
+        3,
+        5,
+        3
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "run_left": {
+      "frames": [
+        4,
+        3,
+        5,
+        3
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "idle_right": {
+      "frames": [
+        6
+      ],
+      "fps": 1,
+      "loop": true
+    },
+    "walk_right": {
+      "frames": [
+        7,
+        6,
+        8,
+        6
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "run_right": {
+      "frames": [
+        7,
+        6,
+        8,
+        6
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "idle_up": {
+      "frames": [
+        9
+      ],
+      "fps": 1,
+      "loop": true
+    },
+    "walk_up": {
+      "frames": [
+        10,
+        9,
+        11,
+        9
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "run_up": {
+      "frames": [
+        10,
+        9,
+        11,
+        9
+      ],
+      "fps": 12,
+      "loop": true
+    }
+  },
+  "fps": {
+    "idle": 1,
+    "walk": 8,
+    "run": 12
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 0.5
+  },
+  "source": {
+    "pack": "Kenney RPG Urban Pack (CC0)",
+    "tiles": [
+      186,
+      213,
+      240,
+      185,
+      212,
+      239,
+      188,
+      215,
+      242,
+      187,
+      214,
+      241
+    ]
+  }
+}

@@ -30,8 +30,8 @@ export default tseslint.config(
     },
   },
   {
-    // Frontière React ↔ Phaser : le moteur, ses scènes et le bus n'importent jamais React.
-    files: ['src/game/scenes/**/*.ts', 'src/game/createGame.ts', 'src/bridge/**/*.ts'],
+    // Frontière React ↔ Phaser : le moteur, le réseau et le bus n'importent jamais React ni les stores.
+    files: ['src/game/**/*.ts', 'src/bridge/**/*.ts', 'src/net/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

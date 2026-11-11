@@ -1,106 +1,414 @@
-// Scène du monde — phase 1 : fond sombre et état de la liaison réseau reçu via le bridge.
-// Pas de carte ni de personnage avant la phase 2.
+// Scène du monde : carte Tiled de la zone, joueur local prédit, autres joueurs interpolés,
+// caméra bornée à zoom entier, voile sombre. La logique réseau vient du bridge (`zone:link`) ;
+// aucune dépendance à React ni aux stores.
 import Phaser from 'phaser';
-import { gameBus, type NetStatusView } from '../../bridge';
+import { gameBus, type GameStatsView, type NetStatusView, type ZoneLink } from '../../bridge';
+import type { AnimState } from '../../generated/protocol';
 import { fonts, hexToNumber, palette } from '../../ui/theme/palette';
+import { MovementKeys } from '../input/movementKeys';
+import { CollisionGrid, type TiledMapLike } from '../movement/CollisionGrid';
 import { SceneKeys } from '../sceneKeys';
+import { VARIANTS_REGISTRY_KEY } from '../sprites/loadSurvivors';
+import {
+  animKey,
+  facingFromAim,
+  GAME_DATA_URL,
+  PLACEHOLDER_SPRITE,
+  variantForId,
+  type Facing,
+} from '../sprites/survivors';
+import { TILESET_NAME, TILESET_TEXTURE } from './BootScene';
 
-const STATE_LABELS: Record<NetStatusView['state'], string> = {
-  idle: 'EN ATTENTE',
-  connecting: 'CONNEXION…',
-  open: 'EN LIGNE',
-  closed: 'HORS LIGNE',
-};
+/** Taille d'une tuile, en pixels monde. */
+export const TILE_PX = 16;
+export const DEFAULT_ZOOM = 3;
+const STATS_INTERVAL_MS = 200;
 
-const STATE_COLORS: Record<NetStatusView['state'], string> = {
-  idle: palette.ash,
-  connecting: palette.amber,
-  open: palette.verdigris400,
-  closed: palette.rust400,
-};
+/** Profondeurs d'affichage : sol < décor < personnages (triés par y) < `above`. */
+const DEPTH = { ground: 0, decor: 1, actors: 10, above: 10_000 } as const;
+/** Profondeurs de la couche d'interface (caméra non zoomée). */
+const UI_DEPTH = { veil: 0, vignette: 1, names: 2, status: 3 } as const;
 
-export function formatStatusLines(view: NetStatusView | undefined): string[] {
-  if (!view) return ['LIAISON', '', 'EN ATTENTE DU TERMINAL…'];
-  const lines = [
-    `ZONE   ${view.zoneName ?? view.zoneId ?? '—'}`,
-    `ÉTAT   ${STATE_LABELS[view.state]}`,
-    `PING   ${view.rttMs === null ? '—' : `${Math.round(view.rttMs)} ms`}`,
-    `TICK   ${view.serverTick ?? '—'}`,
-  ];
-  if (view.state === 'closed' && view.closeLabel) lines.push('', view.closeLabel.toUpperCase());
-  return lines;
+/** Calques affichés ; `collision` ne l'est jamais. */
+const VISIBLE_LAYERS = [
+  { name: 'ground', depth: DEPTH.ground },
+  { name: 'decor', depth: DEPTH.decor },
+  { name: 'above', depth: DEPTH.above },
+] as const;
+
+/** Zoom entier adapté à l'écran : 3 par défaut, 2 sur un petit écran. */
+export function pickZoom(width: number, height: number): number {
+  return Math.min(width, height) < 520 ? 2 : DEFAULT_ZOOM;
 }
 
+/** Abscisse (ou ordonnée) gauche de la vue, bornée à la carte, en pixels monde entiers. */
+export function clampView(center: number, view: number, world: number): number {
+  if (world <= view) return Math.round((world - view) / 2);
+  return Math.round(Math.min(Math.max(center - view / 2, 0), world - view));
+}
+
+interface Actor {
+  readonly sprite: Phaser.GameObjects.Sprite;
+  readonly variant: string;
+  readonly label: Phaser.GameObjects.Text | null;
+  facing: Facing;
+  anim: AnimState;
+}
+
+type Phase = 'waiting' | 'loading-map' | 'ready' | 'map-error';
+
 export class WorldScene extends Phaser.Scene {
-  private title!: Phaser.GameObjects.Text;
+  private link: ZoneLink | null = null;
+  private phase: Phase = 'waiting';
+  private mapKey = '';
+  private mapSize = { w: 0, h: 0 };
+  private zoom = DEFAULT_ZOOM;
+  private view = { x: 0, y: 0 };
+  private uiCamera!: Phaser.Cameras.Scene2D.Camera;
+  private veil!: Phaser.GameObjects.Rectangle;
+  private vignette!: Phaser.GameObjects.Image;
   private statusText!: Phaser.GameObjects.Text;
-  private cursor!: Phaser.GameObjects.Text;
+  private readonly keys = new MovementKeys();
+  private local: Actor | null = null;
+  private readonly remotes = new Map<string, Actor>();
+  private aim = Math.PI / 2;
+  private pointerActive = false;
+  private lastStatsAt = 0;
+  private netState: NetStatusView['state'] = 'idle';
 
   constructor() {
     super(SceneKeys.World);
   }
 
   create(): void {
+    this.phase = 'waiting';
     this.cameras.main.setBackgroundColor(hexToNumber(palette.charcoal950));
+    this.cameras.main.setRoundPixels(true);
+    // Caméra d'interface non zoomée : voile, vignette, noms, messages (texte net à toute échelle).
+    this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height, false, 'ui');
 
-    this.title = this.add
-      .text(0, 0, 'DERNIER REFUGE — LIAISON DE ZONE', {
-        fontFamily: fonts.display,
-        fontSize: '20px',
-        color: palette.verdigris500,
-      })
-      .setOrigin(0.5, 1)
-      .setLetterSpacing(4);
+    this.veil = this.addUi(
+      this.add.rectangle(0, 0, 1, 1, 0x7d8c86).setOrigin(0).setBlendMode(Phaser.BlendModes.MULTIPLY),
+    ).setDepth(UI_DEPTH.veil);
+    this.vignette = this.addUi(this.add.image(0, 0, this.createVignetteTexture()).setOrigin(0)).setDepth(
+      UI_DEPTH.vignette,
+    );
+    this.statusText = this.addUi(
+      this.add
+        .text(0, 0, '', {
+          fontFamily: fonts.terminal,
+          fontSize: '28px',
+          color: palette.bone,
+          align: 'center',
+          lineSpacing: 4,
+        })
+        .setOrigin(0.5)
+        .setShadow(2, 2, '#000000', 0, false, true),
+    ).setDepth(UI_DEPTH.status);
 
-    this.statusText = this.add
-      .text(0, 0, '', {
-        fontFamily: fonts.terminal,
-        fontSize: '28px',
-        color: palette.bone,
-        lineSpacing: 6,
-      })
-      .setOrigin(0.5, 0);
-
-    this.cursor = this.add.text(0, 0, '_', {
-      fontFamily: fonts.terminal,
-      fontSize: '28px',
-      color: palette.verdigris400,
+    this.input.on(Phaser.Input.Events.POINTER_MOVE, () => {
+      this.pointerActive = true;
     });
-    this.tweens.add({
-      targets: this.cursor,
-      alpha: 0,
-      duration: 550,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Stepped',
+    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
+      this.pointerActive = false;
     });
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onBlur);
 
-    this.applyStatus(gameBus.last('net:status'));
-    const unsubscribe = gameBus.on('net:status', (view) => this.applyStatus(view));
+    const offLink = gameBus.on('zone:link', (link) => this.attach(link));
+    const offNet = gameBus.on('net:status', (view) => {
+      this.netState = view.state;
+    });
+    this.netState = gameBus.last('net:status')?.state ?? 'idle';
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      unsubscribe();
+      offLink();
+      offNet();
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layout);
+      window.removeEventListener('keydown', this.onKeyDown);
+      window.removeEventListener('keyup', this.onKeyUp);
+      window.removeEventListener('blur', this.onBlur);
     });
 
     this.layout();
+    this.attach(gameBus.last('zone:link') ?? null);
     gameBus.emit('game:scene-ready', { scene: SceneKeys.World });
   }
 
-  private applyStatus(view: NetStatusView | undefined): void {
-    this.statusText.setText(formatStatusLines(view));
-    this.statusText.setColor(view ? STATE_COLORS[view.state] : palette.ash);
+  override update(): void {
+    const now = performance.now();
+    const link = this.link;
+    if (link && this.phase === 'waiting' && link.welcome) this.loadMap(link.welcome.map_id);
+
+    if (link && this.phase === 'ready') {
+      const axes = this.keys.axes();
+      const localView = link.getLocalPlayer();
+      if (localView) this.updateAim(localView.x, localView.y, axes.moveX, axes.moveY);
+      link.update(now, { move_x: axes.moveX, move_y: axes.moveY, sprint: axes.sprint, aim: this.aim });
+      this.renderActors(link, now);
+    }
+    this.statusText.setText(this.statusMessage());
+    if (now - this.lastStatsAt >= STATS_INTERVAL_MS) {
+      this.lastStatsAt = now;
+      gameBus.emit('game:stats', this.stats(now));
+    }
+  }
+
+  // --- Liaison et carte -------------------------------------------------------------------
+
+  private attach(link: ZoneLink | null): void {
+    this.link = link;
+  }
+
+  private loadMap(mapId: string): void {
+    this.phase = 'loading-map';
+    this.mapKey = `map:${mapId}`;
+    if (this.cache.tilemap.exists(this.mapKey)) {
+      this.buildMap();
+      return;
+    }
+    const onError = (file: Phaser.Loader.File) => {
+      if (file.key === this.mapKey) this.phase = 'map-error';
+    };
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
+    this.load.tilemapTiledJSON(this.mapKey, `${GAME_DATA_URL}/maps/${encodeURIComponent(mapId)}.tmj`);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
+      if (this.phase === 'loading-map') this.buildMap();
+    });
+    this.load.start();
+  }
+
+  private buildMap(): void {
+    const raw = (this.cache.tilemap.get(this.mapKey) as { data?: TiledMapLike } | undefined)?.data;
+    if (!raw) {
+      this.phase = 'map-error';
+      return;
+    }
+    let grid: CollisionGrid;
+    try {
+      grid = CollisionGrid.fromTiledMap(raw);
+    } catch (error) {
+      console.error('[carte]', error);
+      this.phase = 'map-error';
+      return;
+    }
+    const map = this.make.tilemap({ key: this.mapKey });
+    const tileset = map.addTilesetImage(TILESET_NAME, TILESET_TEXTURE);
+    if (!tileset) {
+      console.error(`[carte] Tileset « ${TILESET_NAME} » absent de la carte ou de l'image`);
+      this.phase = 'map-error';
+      return;
+    }
+    for (const { name, depth } of VISIBLE_LAYERS) {
+      const layer = map.createLayer(name, tileset, 0, 0);
+      if (layer) this.addWorld(layer.setDepth(depth));
+      else console.warn(`[carte] Calque « ${name} » absent`);
+    }
+    this.mapSize = { w: map.widthInPixels, h: map.heightInPixels };
+    this.cameras.main.setBounds(0, 0, this.mapSize.w, this.mapSize.h);
+    this.link?.setCollisionGrid(grid);
+    this.phase = 'ready';
     this.layout();
+  }
+
+  // --- Personnages ------------------------------------------------------------------------
+
+  private renderActors(link: ZoneLink, now: number): void {
+    const local = link.getLocalPlayer();
+    if (local) {
+      this.local ??= this.createActor(local.id, null);
+      this.placeActor(this.local, local.x, local.y, local.aim, local.anim);
+      this.followCamera(local.x * TILE_PX, local.y * TILE_PX);
+    }
+
+    const seen = new Set<string>();
+    for (const remote of link.getRemotePlayers(now)) {
+      seen.add(remote.id);
+      let actor = this.remotes.get(remote.id);
+      if (!actor) {
+        actor = this.createActor(remote.id, remote.name);
+        this.remotes.set(remote.id, actor);
+      }
+      this.placeActor(actor, remote.x, remote.y, remote.aim, remote.anim);
+    }
+    for (const [id, actor] of this.remotes) {
+      if (seen.has(id)) continue;
+      actor.sprite.destroy();
+      actor.label?.destroy();
+      this.remotes.delete(id);
+    }
+    // Les noms suivent les sprites, en coordonnées écran (caméra d'interface).
+    for (const actor of this.remotes.values()) this.placeLabel(actor);
+  }
+
+  private createActor(id: string, name: string | null): Actor {
+    const variants = (this.registry.get(VARIANTS_REGISTRY_KEY) as string[] | undefined) ?? [
+      PLACEHOLDER_SPRITE,
+    ];
+    const variant = variantForId(id, variants);
+    const sprite = this.addWorld(this.add.sprite(0, 0, variant, 0));
+    let label: Phaser.GameObjects.Text | null = null;
+    if (name !== null) {
+      label = this.addUi(
+        this.add
+          .text(0, 0, name, {
+            fontFamily: fonts.terminal,
+            fontSize: '20px',
+            color: palette.bone,
+            stroke: '#000000',
+            strokeThickness: 4,
+          })
+          .setOrigin(0.5, 1)
+          .setDepth(UI_DEPTH.names),
+      );
+    }
+    return { sprite, variant, label, facing: 'down', anim: 'idle' };
+  }
+
+  private placeActor(actor: Actor, x: number, y: number, aim: number, anim: AnimState): void {
+    // Arrondi au pixel monde : rendu net, pas de demi-pixels.
+    actor.sprite.setPosition(Math.round(x * TILE_PX), Math.round(y * TILE_PX));
+    actor.sprite.setDepth(DEPTH.actors + y / 1000);
+    const facing = facingFromAim(aim);
+    if (facing !== actor.facing || anim !== actor.anim || !actor.sprite.anims.isPlaying) {
+      actor.facing = facing;
+      actor.anim = anim;
+      const key = animKey(actor.variant, anim, facing);
+      if (this.anims.exists(key)) actor.sprite.play(key, true);
+    }
+  }
+
+  private placeLabel(actor: Actor): void {
+    if (!actor.label) return;
+    const top = actor.sprite.y - actor.sprite.displayHeight * actor.sprite.originY;
+    actor.label.setPosition(
+      Math.round((actor.sprite.x - this.view.x) * this.zoom),
+      Math.round((top - this.view.y) * this.zoom) - 2,
+    );
+  }
+
+  // --- Caméra et entrées ------------------------------------------------------------------
+
+  /** Centre la vue sur le joueur, bornée à la carte, en pixels monde entiers. */
+  private followCamera(px: number, py: number): void {
+    const cam = this.cameras.main;
+    const viewW = cam.width / this.zoom;
+    const viewH = cam.height / this.zoom;
+    this.view = { x: clampView(px, viewW, this.mapSize.w), y: clampView(py, viewH, this.mapSize.h) };
+    // Phaser : worldView.x = scrollX + width/2 − width/(2 zoom).
+    cam.setScroll(this.view.x - cam.width / 2 + viewW / 2, this.view.y - cam.height / 2 + viewH / 2);
+  }
+
+  private updateAim(x: number, y: number, moveX: number, moveY: number): void {
+    const pointer = this.input.activePointer;
+    if (this.pointerActive) {
+      const wx = this.view.x + pointer.x / this.zoom;
+      const wy = this.view.y + pointer.y / this.zoom;
+      const dx = wx - x * TILE_PX;
+      const dy = wy - y * TILE_PX;
+      if (dx !== 0 || dy !== 0) this.aim = Math.atan2(dy, dx);
+    } else if (moveX !== 0 || moveY !== 0) {
+      this.aim = Math.atan2(moveY, moveX);
+    }
+  }
+
+  private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (isTextTarget(event.target)) return;
+    if (this.keys.keyDown(event)) event.preventDefault();
+  };
+
+  private readonly onKeyUp = (event: KeyboardEvent): void => {
+    this.keys.keyUp(event);
+  };
+
+  private readonly onBlur = (): void => {
+    this.keys.reset();
+  };
+
+  // --- Interface ---------------------------------------------------------------------------
+
+  private statusMessage(): string {
+    if (this.netState === 'closed') return this.phase === 'ready' ? '' : 'LIAISON PERDUE';
+    switch (this.phase) {
+      case 'waiting':
+        return this.link ? 'CONNEXION À LA ZONE…' : 'EN ATTENTE DU TERMINAL…';
+      case 'loading-map':
+        return 'CHARGEMENT DE LA CARTE…';
+      case 'map-error':
+        return 'CARTE INTROUVABLE\nLes données de la zone ne sont pas disponibles.';
+      case 'ready':
+        return this.link?.ready ? '' : 'LOCALISATION DU SURVIVANT…';
+    }
+  }
+
+  private stats(now: number): GameStatsView {
+    const stats = this.link?.getStats(now);
+    const position = stats?.position ?? null;
+    const message = this.statusMessage();
+    return {
+      tileX: position ? position.x : null,
+      tileY: position ? position.y : null,
+      visiblePlayers: stats?.visiblePlayers ?? 0,
+      correctionTiles: stats?.correctionTiles ?? 0,
+      loading: message.split('\n')[0] ?? '',
+    };
+  }
+
+  /** Vignette : dégradé radial précalculé une fois (aucun shader). */
+  private createVignetteTexture(): string {
+    const key = 'fx:vignette';
+    if (this.textures.exists(key)) return key;
+    const size = 256;
+    const texture = this.textures.createCanvas(key, size, size);
+    if (!texture) return key;
+    const ctx = texture.getContext();
+    const gradient = ctx.createRadialGradient(
+      size / 2,
+      size / 2,
+      size * 0.22,
+      size / 2,
+      size / 2,
+      size * 0.72,
+    );
+    gradient.addColorStop(0, 'rgba(6, 9, 8, 0)');
+    gradient.addColorStop(0.55, 'rgba(6, 9, 8, 0.35)');
+    gradient.addColorStop(1, 'rgba(6, 9, 8, 0.9)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    texture.refresh();
+    return key;
   }
 
   // Fonction fléchée : passée telle quelle comme écouteur de redimensionnement.
   private readonly layout = (): void => {
     const { width, height } = this.scale.gameSize;
-    const cx = Math.round(width / 2);
-    const cy = Math.round(height / 2);
-    this.title.setPosition(cx, cy - 70);
-    this.statusText.setPosition(cx, cy - 50);
-    const bounds = this.statusText.getBounds();
-    this.cursor.setPosition(Math.round(bounds.right + 4), Math.round(bounds.bottom - 34));
+    this.zoom = pickZoom(width, height);
+    this.cameras.main.setZoom(this.zoom);
+    this.uiCamera.setSize(width, height);
+    this.veil.setSize(width, height);
+    this.vignette.setDisplaySize(width, height);
+    this.statusText.setPosition(Math.round(width / 2), Math.round(height / 2));
   };
+
+  /** Objet du monde : vu par la caméra principale seulement. */
+  private addWorld<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.uiCamera.ignore(object);
+    return object;
+  }
+
+  /** Objet d'interface : vu par la caméra non zoomée seulement. */
+  private addUi<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.cameras.main.ignore(object);
+    return object;
+  }
+}
+
+function isTextTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
 }

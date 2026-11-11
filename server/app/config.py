@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_JWT_SECRET = "dev-secret-a-changer-en-production-0123456789"
+# Racine du dépôt (server/app/config.py → parents[2]) : contient maps/, assets/ et shared/.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -24,6 +27,9 @@ class Settings(BaseSettings):
     tick_rate: int = Field(default=20, ge=1, le=60)
     max_characters_per_account: int = 1
     cors_origins: list[str] = ["http://localhost:5173"]
+    game_data_dir: Path = Field(
+        default=REPO_ROOT, description="Racine des données de jeu (maps/, shared/movement/), DR_GAME_DATA_DIR"
+    )
     auth_rate_limit_per_minute: int = Field(default=20, ge=1, description="Par IP, pour login et register")
 
     @model_validator(mode="after")

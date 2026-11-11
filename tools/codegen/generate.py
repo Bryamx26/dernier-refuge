@@ -108,7 +108,7 @@ def py_field(schema: dict[str, Any], required: bool) -> str:
 def py_object(name: str, schema: dict[str, Any], defs: dict[str, Any]) -> list[str]:
     check_keys(schema, name)
     if schema.get("type") != "object":
-        raise SchemaError(f"{name}: un message doit être un objet")
+        raise SchemaError(f"{name}: doit être un objet")
     lines = [f"class {name}(ProtocolModel):"]
     if "description" in schema:
         lines.append(f'    """{schema["description"]}"""')
@@ -146,7 +146,10 @@ def generate_python(spec: dict[str, Any]) -> str:
         "",
     ]
     for name, sub in defs.items():
-        out += ["", f"{name} = {py_type(sub, defs, name)}", ""]
+        if sub.get("type") == "object":
+            out += ["", *py_object(name, sub, defs), ""]
+        else:
+            out += ["", f"{name} = {py_type(sub, defs, name)}", ""]
     for side in ("client", "server"):
         for msg, sub in spec[side].items():
             out += ["", *py_object(pascal(msg) + "Payload", sub, defs), ""]
@@ -201,6 +204,9 @@ def generate_typescript(spec: dict[str, Any]) -> str:
     defs = spec["defs"]
     out = [f"// {HEADER}", "", f"export const PROTOCOL_VERSION = {spec['version']};", ""]
     for name, sub in defs.items():
+        if sub.get("type") == "object":
+            out += [*ts_object(name, sub, defs), ""]
+            continue
         if "description" in sub:
             out.append(f"/** {sub['description']} */")
         out += [f"export type {name} = {ts_type(sub, defs, name)};", ""]

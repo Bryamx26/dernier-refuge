@@ -20,9 +20,9 @@ export const palette = {
 
 export const fonts = {
   /** Titres et libellés. */
-  display: '"Pixelify Sans", "VT323", monospace',
+  display: '"Silkscreen", "VT323", monospace',
   /** Texte de terminal. */
-  terminal: '"VT323", "Pixelify Sans", monospace',
+  terminal: '"VT323", monospace',
 } as const;
 
 /** Convertit `#rrggbb` en entier 0xRRGGBB (couleurs Phaser). */
