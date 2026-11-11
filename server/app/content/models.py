@@ -184,4 +184,5 @@ class ZonePopulation(_Strict):
     seed: int
     respawn_s: float = Field(ge=0)
     respawn_min_player_distance: float = Field(ge=0)
+    spawn_safe_radius: float = Field(ge=0)
     zombie_groups: list[ZombieGroup]

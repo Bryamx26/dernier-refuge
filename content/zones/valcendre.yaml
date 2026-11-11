@@ -2,15 +2,17 @@
 # Chaque groupe fait apparaître `count` zombies sur des tuiles libres tirées dans le rectangle
 # [x0, x1] × [y0, y1] (tirage déterministe, graine `seed`). Un zombie tué réapparaît au même point
 # d'origine après `respawn_s` secondes, si aucun joueur n'est à moins de `respawn_min_player_distance`.
-# Le point d'apparition des joueurs (place du village, vers 58–65 × 50–57) est laissé libre.
+# La place du village (points d'apparition, vers 58–65 × 50–57) est laissée libre : voir spawn_safe_radius.
 
 seed: 4242
 respawn_s: 180
 respawn_min_player_distance: 20
+# Aucun zombie n'apparaît à moins de cette distance (tuiles) d'un point d'apparition des joueurs.
+spawn_safe_radius: 18
 
 zombie_groups:
   - {type: rodeur, count: 6, x0: 96, x1: 124, y0: 60, y1: 66}    # route de l'est
-  - {type: rodeur, count: 5, x0: 30, x1: 54, y0: 60, y1: 66}     # route de l'ouest
+  - {type: rodeur, count: 5, x0: 22, x1: 46, y0: 60, y1: 66}     # route de l'ouest
   - {type: rodeur, count: 6, x0: 15, x1: 32, y0: 95, y1: 112}    # parking abandonné
   - {type: rodeur, count: 5, x0: 76, x1: 98, y0: 86, y1: 99}     # autour de l'école
   - {type: rodeur, count: 4, x0: 44, x1: 62, y0: 86, y1: 99}     # coopérative

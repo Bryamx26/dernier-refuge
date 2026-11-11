@@ -245,6 +245,7 @@ def test_population_places_zombies_on_free_tiles_away_from_spawn() -> None:
         seed=3,
         respawn_s=1,
         respawn_min_player_distance=0,
+        spawn_safe_radius=8,
         zombie_groups=[ZombieGroup(type="rodeur", count=12, x0=1, x1=38, y0=1, y1=38)],
     )
     game = _game(population)

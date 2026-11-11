@@ -149,7 +149,7 @@ class Gameplay:
                     (group.x0, group.x1, group.y0, group.y1),
                     start_index=len(self.zombies) + 1,
                     avoid=self.map.spawns,
-                    avoid_radius=8.0,
+                    avoid_radius=population.spawn_safe_radius,
                 )
             )
 
