@@ -122,7 +122,7 @@ export function AuthScreen({ api = defaultApi }: AuthScreenProps) {
           </Button>
         </form>
       </Frame>
-      <p className="text-base text-ash">Prototype · phase 1</p>
+      <p className="text-base text-ash">Prototype · phase 2</p>
     </main>
   );
 }

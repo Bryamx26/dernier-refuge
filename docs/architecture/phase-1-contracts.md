@@ -71,6 +71,7 @@ router = APIRouter()   # @router.websocket("/ws/zone/{zone_id}") ; paramètre de
 | 4003 | Zone pleine |
 | 4004 | Zone inconnue |
 | 4008 | Trop de messages refusés (abus) |
+| 4009 | Client trop lent (file sortante pleine) — phase 2 |
 
 ## Routes REST (Backend)
 

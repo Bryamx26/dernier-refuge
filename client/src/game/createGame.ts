@@ -9,8 +9,14 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     type: Phaser.AUTO,
     parent,
     backgroundColor: hexToNumber(palette.charcoal950),
+    // Rendu pixel net : filtrage au plus proche et positions arrondies au pixel.
     pixelArt: true,
+    roundPixels: true,
     banner: false,
+    // Clavier lu par la WorldScene via `event.code` (indépendant AZERTY/QWERTY).
+    input: { keyboard: false },
+    // Pas de menu contextuel : le clic droit servira au combat (phases suivantes).
+    disableContextMenu: true,
     audio: { noAudio: true },
     scale: {
       mode: Phaser.Scale.RESIZE,

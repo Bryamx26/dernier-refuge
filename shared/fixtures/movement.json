@@ -1,0 +1,2106 @@
+[
+  {
+    "name": "libre_droite",
+    "description": "Marche vers la droite sans obstacle.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 4,
+      "y": 4
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 4.15,
+        "y": 4
+      },
+      {
+        "x": 4.300000000000001,
+        "y": 4
+      },
+      {
+        "x": 4.450000000000001,
+        "y": 4
+      },
+      {
+        "x": 4.600000000000001,
+        "y": 4
+      },
+      {
+        "x": 4.750000000000002,
+        "y": 4
+      }
+    ]
+  },
+  {
+    "name": "libre_gauche_haut",
+    "description": "Marche vers la gauche puis vers le haut.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 4.5,
+      "y": 4.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 4.35,
+        "y": 4.5
+      },
+      {
+        "x": 4.199999999999999,
+        "y": 4.5
+      },
+      {
+        "x": 4.049999999999999,
+        "y": 4.5
+      },
+      {
+        "x": 4.049999999999999,
+        "y": 4.35
+      },
+      {
+        "x": 4.049999999999999,
+        "y": 4.199999999999999
+      },
+      {
+        "x": 4.049999999999999,
+        "y": 4.049999999999999
+      }
+    ]
+  },
+  {
+    "name": "immobile",
+    "description": "Entrée nulle : la position ne change pas.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 3.25,
+      "y": 2.75
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 0,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 3.25,
+        "y": 2.75
+      },
+      {
+        "x": 3.25,
+        "y": 2.75
+      },
+      {
+        "x": 3.25,
+        "y": 2.75
+      }
+    ]
+  },
+  {
+    "name": "diagonale_normalisee",
+    "description": "(1, 1) est normalisé : même vitesse qu'en ligne droite.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 2,
+      "y": 2
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.106066017177982,
+        "y": 2.106066017177982
+      },
+      {
+        "x": 2.212132034355964,
+        "y": 2.212132034355964
+      },
+      {
+        "x": 2.3181980515339458,
+        "y": 2.3181980515339458
+      },
+      {
+        "x": 2.4242640687119277,
+        "y": 2.4242640687119277
+      }
+    ]
+  },
+  {
+    "name": "diagonale_partielle",
+    "description": "Norme ≤ 1 : pas de normalisation (0,5 ; 0,5), puis norme proche de 1 (0,6 ; 0,8).",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 2,
+      "y": 2
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0.5,
+        "move_y": 0.5,
+        "sprint": false
+      },
+      {
+        "move_x": 0.5,
+        "move_y": 0.5,
+        "sprint": false
+      },
+      {
+        "move_x": 0.6,
+        "move_y": 0.8,
+        "sprint": false
+      },
+      {
+        "move_x": 0.6,
+        "move_y": 0.8,
+        "sprint": false
+      },
+      {
+        "move_x": -0.3,
+        "move_y": 0.7,
+        "sprint": false
+      },
+      {
+        "move_x": -0.3,
+        "move_y": 0.7,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.075,
+        "y": 2.075
+      },
+      {
+        "x": 2.1500000000000004,
+        "y": 2.1500000000000004
+      },
+      {
+        "x": 2.24,
+        "y": 2.2700000000000005
+      },
+      {
+        "x": 2.33,
+        "y": 2.3900000000000006
+      },
+      {
+        "x": 2.285,
+        "y": 2.4950000000000006
+      },
+      {
+        "x": 2.24,
+        "y": 2.6000000000000005
+      }
+    ]
+  },
+  {
+    "name": "sprint",
+    "description": "Sprint vers le bas.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 4,
+      "y": 1
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": true
+      }
+    ],
+    "expected": [
+      {
+        "x": 4,
+        "y": 1.25
+      },
+      {
+        "x": 4,
+        "y": 1.5
+      },
+      {
+        "x": 4,
+        "y": 1.75
+      },
+      {
+        "x": 4,
+        "y": 2
+      }
+    ]
+  },
+  {
+    "name": "mur_droite",
+    "description": "Mur sur X (droite) : la boîte s'arrête exactement contre la tuile (x = 5 − 0,3).",
+    "grid": [
+      "........",
+      "........",
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      "........"
+    ],
+    "start": {
+      "x": 3.5,
+      "y": 3.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 3.65,
+        "y": 3.5
+      },
+      {
+        "x": 3.8,
+        "y": 3.5
+      },
+      {
+        "x": 3.9499999999999997,
+        "y": 3.5
+      },
+      {
+        "x": 4.1,
+        "y": 3.5
+      },
+      {
+        "x": 4.25,
+        "y": 3.5
+      },
+      {
+        "x": 4.4,
+        "y": 3.5
+      },
+      {
+        "x": 4.550000000000001,
+        "y": 3.5
+      },
+      {
+        "x": 4.700000000000001,
+        "y": 3.5
+      },
+      {
+        "x": 4.7,
+        "y": 3.5
+      },
+      {
+        "x": 4.7,
+        "y": 3.5
+      },
+      {
+        "x": 4.7,
+        "y": 3.5
+      },
+      {
+        "x": 4.7,
+        "y": 3.5
+      }
+    ]
+  },
+  {
+    "name": "mur_gauche",
+    "description": "Mur sur X (gauche) : arrêt à x = 2 + 0,3.",
+    "grid": [
+      "........",
+      ".#......",
+      ".#......",
+      ".#......",
+      "........"
+    ],
+    "start": {
+      "x": 3.6,
+      "y": 2.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      }
+    ],
+    "expected": [
+      {
+        "x": 3.35,
+        "y": 2.5
+      },
+      {
+        "x": 3.1,
+        "y": 2.5
+      },
+      {
+        "x": 2.85,
+        "y": 2.5
+      },
+      {
+        "x": 2.6,
+        "y": 2.5
+      },
+      {
+        "x": 2.35,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      },
+      {
+        "x": 2.3,
+        "y": 2.5
+      }
+    ]
+  },
+  {
+    "name": "mur_bas",
+    "description": "Mur sur Y (bas) : arrêt à y = 5 − 0,3.",
+    "grid": [
+      "......",
+      "......",
+      "......",
+      "......",
+      "......",
+      "######",
+      "......"
+    ],
+    "start": {
+      "x": 2.5,
+      "y": 3
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.5,
+        "y": 3.15
+      },
+      {
+        "x": 2.5,
+        "y": 3.3
+      },
+      {
+        "x": 2.5,
+        "y": 3.4499999999999997
+      },
+      {
+        "x": 2.5,
+        "y": 3.5999999999999996
+      },
+      {
+        "x": 2.5,
+        "y": 3.7499999999999996
+      },
+      {
+        "x": 2.5,
+        "y": 3.8999999999999995
+      },
+      {
+        "x": 2.5,
+        "y": 4.05
+      },
+      {
+        "x": 2.5,
+        "y": 4.2
+      },
+      {
+        "x": 2.5,
+        "y": 4.3500000000000005
+      },
+      {
+        "x": 2.5,
+        "y": 4.500000000000001
+      },
+      {
+        "x": 2.5,
+        "y": 4.650000000000001
+      },
+      {
+        "x": 2.5,
+        "y": 4.7
+      }
+    ]
+  },
+  {
+    "name": "mur_haut",
+    "description": "Mur sur Y (haut) : arrêt à y = 2 + 0,3.",
+    "grid": [
+      "......",
+      "######",
+      "......",
+      "......",
+      "......"
+    ],
+    "start": {
+      "x": 3,
+      "y": 3.9
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": true
+      }
+    ],
+    "expected": [
+      {
+        "x": 3,
+        "y": 3.65
+      },
+      {
+        "x": 3,
+        "y": 3.4
+      },
+      {
+        "x": 3,
+        "y": 3.15
+      },
+      {
+        "x": 3,
+        "y": 2.9
+      },
+      {
+        "x": 3,
+        "y": 2.65
+      },
+      {
+        "x": 3,
+        "y": 2.4
+      },
+      {
+        "x": 3,
+        "y": 2.3
+      },
+      {
+        "x": 3,
+        "y": 2.3
+      },
+      {
+        "x": 3,
+        "y": 2.3
+      },
+      {
+        "x": 3,
+        "y": 2.3
+      }
+    ]
+  },
+  {
+    "name": "coin",
+    "description": "Diagonale dans un coin rentrant : bloqué sur les deux axes.",
+    "grid": [
+      "......#",
+      "......#",
+      "......#",
+      "......#",
+      "#######"
+    ],
+    "start": {
+      "x": 3,
+      "y": 1.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 3.106066017177982,
+        "y": 1.6060660171779821
+      },
+      {
+        "x": 3.212132034355964,
+        "y": 1.7121320343559643
+      },
+      {
+        "x": 3.3181980515339458,
+        "y": 1.8181980515339464
+      },
+      {
+        "x": 3.4242640687119277,
+        "y": 1.9242640687119286
+      },
+      {
+        "x": 3.5303300858899096,
+        "y": 2.0303300858899105
+      },
+      {
+        "x": 3.6363961030678915,
+        "y": 2.1363961030678924
+      },
+      {
+        "x": 3.7424621202458734,
+        "y": 2.2424621202458743
+      },
+      {
+        "x": 3.8485281374238554,
+        "y": 2.3485281374238562
+      },
+      {
+        "x": 3.9545941546018373,
+        "y": 2.454594154601838
+      },
+      {
+        "x": 4.060660171779819,
+        "y": 2.56066017177982
+      },
+      {
+        "x": 4.166726188957801,
+        "y": 2.666726188957802
+      },
+      {
+        "x": 4.272792206135783,
+        "y": 2.772792206135784
+      },
+      {
+        "x": 4.378858223313765,
+        "y": 2.878858223313766
+      },
+      {
+        "x": 4.484924240491747,
+        "y": 2.9849242404917478
+      },
+      {
+        "x": 4.590990257669729,
+        "y": 3.0909902576697297
+      },
+      {
+        "x": 4.697056274847711,
+        "y": 3.1970562748477116
+      },
+      {
+        "x": 4.803122292025693,
+        "y": 3.3031222920256935
+      },
+      {
+        "x": 4.9091883092036745,
+        "y": 3.4091883092036754
+      },
+      {
+        "x": 5.0152543263816565,
+        "y": 3.5152543263816574
+      },
+      {
+        "x": 5.121320343559638,
+        "y": 3.6213203435596393
+      },
+      {
+        "x": 5.22738636073762,
+        "y": 3.7
+      },
+      {
+        "x": 5.333452377915602,
+        "y": 3.7
+      },
+      {
+        "x": 5.439518395093584,
+        "y": 3.7
+      },
+      {
+        "x": 5.545584412271566,
+        "y": 3.7
+      },
+      {
+        "x": 5.651650429449548,
+        "y": 3.7
+      },
+      {
+        "x": 5.7,
+        "y": 3.7
+      },
+      {
+        "x": 5.7,
+        "y": 3.7
+      },
+      {
+        "x": 5.7,
+        "y": 3.7
+      },
+      {
+        "x": 5.7,
+        "y": 3.7
+      },
+      {
+        "x": 5.7,
+        "y": 3.7
+      }
+    ]
+  },
+  {
+    "name": "glissement",
+    "description": "Diagonale contre un mur vertical : X bloqué, Y continue (glissement).",
+    "grid": [
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      ".....#..",
+      ".....#.."
+    ],
+    "start": {
+      "x": 4.4,
+      "y": 1
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 4.506066017177982,
+        "y": 1.1060660171779821
+      },
+      {
+        "x": 4.612132034355964,
+        "y": 1.2121320343559643
+      },
+      {
+        "x": 4.7,
+        "y": 1.3181980515339464
+      },
+      {
+        "x": 4.7,
+        "y": 1.4242640687119286
+      },
+      {
+        "x": 4.7,
+        "y": 1.5303300858899107
+      },
+      {
+        "x": 4.7,
+        "y": 1.6363961030678928
+      },
+      {
+        "x": 4.7,
+        "y": 1.742462120245875
+      },
+      {
+        "x": 4.7,
+        "y": 1.8485281374238571
+      },
+      {
+        "x": 4.7,
+        "y": 1.9545941546018393
+      },
+      {
+        "x": 4.7,
+        "y": 2.0606601717798214
+      }
+    ]
+  },
+  {
+    "name": "angle_saillant",
+    "description": "Diagonale vers l'angle d'un bloc isolé : X résolu avant Y.",
+    "grid": [
+      "......",
+      "......",
+      "......",
+      "...#..",
+      "......",
+      "......"
+    ],
+    "start": {
+      "x": 2.2,
+      "y": 2.2
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.306066017177982,
+        "y": 2.306066017177982
+      },
+      {
+        "x": 2.412132034355964,
+        "y": 2.412132034355964
+      },
+      {
+        "x": 2.518198051533946,
+        "y": 2.518198051533946
+      },
+      {
+        "x": 2.624264068711928,
+        "y": 2.624264068711928
+      },
+      {
+        "x": 2.7303300858899098,
+        "y": 2.7
+      },
+      {
+        "x": 2.8363961030678917,
+        "y": 2.7
+      },
+      {
+        "x": 2.9424621202458736,
+        "y": 2.7
+      },
+      {
+        "x": 3.0485281374238555,
+        "y": 2.7
+      }
+    ]
+  },
+  {
+    "name": "bord_carte",
+    "description": "Hors carte = solide : arrêt à 0,3 du bord gauche puis du bord haut.",
+    "grid": [
+      "....",
+      "....",
+      "...."
+    ],
+    "start": {
+      "x": 1,
+      "y": 1
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": -1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 0.85,
+        "y": 1
+      },
+      {
+        "x": 0.7,
+        "y": 1
+      },
+      {
+        "x": 0.5499999999999999,
+        "y": 1
+      },
+      {
+        "x": 0.3999999999999999,
+        "y": 1
+      },
+      {
+        "x": 0.3,
+        "y": 1
+      },
+      {
+        "x": 0.3,
+        "y": 1
+      },
+      {
+        "x": 0.3,
+        "y": 1
+      },
+      {
+        "x": 0.3,
+        "y": 1
+      },
+      {
+        "x": 0.3,
+        "y": 0.85
+      },
+      {
+        "x": 0.3,
+        "y": 0.7
+      },
+      {
+        "x": 0.3,
+        "y": 0.5499999999999999
+      },
+      {
+        "x": 0.3,
+        "y": 0.3999999999999999
+      },
+      {
+        "x": 0.3,
+        "y": 0.3
+      },
+      {
+        "x": 0.3,
+        "y": 0.3
+      },
+      {
+        "x": 0.3,
+        "y": 0.3
+      },
+      {
+        "x": 0.3,
+        "y": 0.3
+      }
+    ]
+  },
+  {
+    "name": "bord_carte_bas_droite",
+    "description": "Sprint vers le coin bas-droit de la carte.",
+    "grid": [
+      "....",
+      "....",
+      "...."
+    ],
+    "start": {
+      "x": 2,
+      "y": 1.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      },
+      {
+        "move_x": 1,
+        "move_y": 1,
+        "sprint": true
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.176776695296637,
+        "y": 1.676776695296637
+      },
+      {
+        "x": 2.353553390593274,
+        "y": 1.853553390593274
+      },
+      {
+        "x": 2.530330085889911,
+        "y": 2.030330085889911
+      },
+      {
+        "x": 2.707106781186548,
+        "y": 2.207106781186548
+      },
+      {
+        "x": 2.883883476483185,
+        "y": 2.383883476483185
+      },
+      {
+        "x": 3.060660171779822,
+        "y": 2.560660171779822
+      },
+      {
+        "x": 3.237436867076459,
+        "y": 2.7
+      },
+      {
+        "x": 3.414213562373096,
+        "y": 2.7
+      },
+      {
+        "x": 3.590990257669733,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      },
+      {
+        "x": 3.7,
+        "y": 2.7
+      }
+    ]
+  },
+  {
+    "name": "entree_hors_bornes",
+    "description": "Axes hors de [-1, 1] bornés puis normalisés : (5 ; -3) → (1 ; -1) / √2.",
+    "grid": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "start": {
+      "x": 4,
+      "y": 4
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 5,
+        "move_y": -3,
+        "sprint": false
+      },
+      {
+        "move_x": -2.5,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": 0,
+        "move_y": 1000000000,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 4.106066017177982,
+        "y": 3.893933982822018
+      },
+      {
+        "x": 3.856066017177982,
+        "y": 3.893933982822018
+      },
+      {
+        "x": 3.856066017177982,
+        "y": 4.043933982822018
+      }
+    ]
+  },
+  {
+    "name": "couloir",
+    "description": "Couloir d'une tuile : la boîte (0,6) passe sans toucher les murs.",
+    "grid": [
+      "#####",
+      "#...#",
+      "##.##",
+      "##.##",
+      "##.##",
+      "#...#",
+      "#####"
+    ],
+    "start": {
+      "x": 2.5,
+      "y": 1.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      },
+      {
+        "move_x": 0,
+        "move_y": 1,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 2.5,
+        "y": 1.65
+      },
+      {
+        "x": 2.5,
+        "y": 1.7999999999999998
+      },
+      {
+        "x": 2.5,
+        "y": 1.9499999999999997
+      },
+      {
+        "x": 2.5,
+        "y": 2.0999999999999996
+      },
+      {
+        "x": 2.5,
+        "y": 2.2499999999999996
+      },
+      {
+        "x": 2.5,
+        "y": 2.3999999999999995
+      },
+      {
+        "x": 2.5,
+        "y": 2.5499999999999994
+      },
+      {
+        "x": 2.5,
+        "y": 2.6999999999999993
+      },
+      {
+        "x": 2.5,
+        "y": 2.849999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 2.999999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 3.149999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 3.299999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 3.449999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 3.5999999999999988
+      },
+      {
+        "x": 2.5,
+        "y": 3.7499999999999987
+      },
+      {
+        "x": 2.5,
+        "y": 3.8999999999999986
+      },
+      {
+        "x": 2.5,
+        "y": 4.049999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 4.199999999999999
+      },
+      {
+        "x": 2.5,
+        "y": 4.35
+      },
+      {
+        "x": 2.5,
+        "y": 4.5
+      },
+      {
+        "x": 2.5,
+        "y": 4.65
+      },
+      {
+        "x": 2.5,
+        "y": 4.800000000000001
+      },
+      {
+        "x": 2.5,
+        "y": 4.950000000000001
+      },
+      {
+        "x": 2.5,
+        "y": 5.100000000000001
+      },
+      {
+        "x": 2.5,
+        "y": 5.250000000000002
+      }
+    ]
+  },
+  {
+    "name": "sortie_de_mur",
+    "description": "Départ chevauchant un mur : les tuiles déjà recouvertes n'empêchent pas d'en sortir.",
+    "grid": [
+      "......",
+      "..#...",
+      "......",
+      "......"
+    ],
+    "start": {
+      "x": 2.9,
+      "y": 1.5
+    },
+    "dt": 0.05,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": false
+      }
+    ],
+    "expected": [
+      {
+        "x": 3.05,
+        "y": 1.5
+      },
+      {
+        "x": 3.1999999999999997,
+        "y": 1.5
+      },
+      {
+        "x": 3.3499999999999996,
+        "y": 1.5
+      },
+      {
+        "x": 3.3,
+        "y": 1.5
+      },
+      {
+        "x": 3.3,
+        "y": 1.5
+      },
+      {
+        "x": 3.3,
+        "y": 1.5
+      }
+    ]
+  },
+  {
+    "name": "grand_dt",
+    "description": "dt de 1 s en sprint (5 tuiles) contre un mur fin : pas de traversée.",
+    "grid": [
+      "..........",
+      "......#...",
+      ".........."
+    ],
+    "start": {
+      "x": 1.5,
+      "y": 1.5
+    },
+    "dt": 1.0,
+    "inputs": [
+      {
+        "move_x": 1,
+        "move_y": 0,
+        "sprint": true
+      },
+      {
+        "move_x": -1,
+        "move_y": 0,
+        "sprint": true
+      }
+    ],
+    "expected": [
+      {
+        "x": 5.7,
+        "y": 1.5
+      },
+      {
+        "x": 0.7000000000000002,
+        "y": 1.5
+      }
+    ]
+  }
+]

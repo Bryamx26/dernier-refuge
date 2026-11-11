@@ -19,6 +19,18 @@ jobs:
         with: { python-version: "3.12" }
       - run: python tools/codegen/generate.py --check
 
+  content:
+    name: Contenu (carte et assets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "0.11.32" }
+      - run: uv python install 3.12
+      - run: python3 tools/mapgen/generate_valcendre.py --check
+      - run: python3 tools/mapgen/check_map.py maps/valcendre.tmj
+      - run: uv run --project server pytest tools/tests -q
+
   server:
     name: Serveur (lint, types, tests, migrations)
     runs-on: ubuntu-latest
@@ -46,6 +58,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy app
+      - run: uv run python -m app.zone.movement_fixtures --check
       - run: uv run pytest -q
 
   client:

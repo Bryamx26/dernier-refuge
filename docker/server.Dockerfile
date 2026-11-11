@@ -8,7 +8,11 @@ WORKDIR /srv/server
 COPY server/pyproject.toml server/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+# Données de jeu lues par le serveur : protocole, déplacement, cartes.
+COPY shared/ /srv/shared/
+COPY maps/ /srv/maps/
 COPY server/ ./
+ENV DR_GAME_DATA_DIR=/srv
 ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8000
 # Applique les migrations puis démarre l'API.

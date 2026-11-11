@@ -1,6 +1,8 @@
 // Décodage et validation des messages serveur. Tout message invalide ou de type inconnu est rejeté (null).
 import {
   SERVER_MESSAGE_TYPES,
+  type AnimState,
+  type EntityState,
   type ErrorCode,
   type ServerMessage,
   type ServerMessageType,
@@ -10,6 +12,7 @@ import {
 type UnknownRecord = Record<string, unknown>;
 
 const ERROR_CODES: readonly ErrorCode[] = ['bad_message', 'unknown_type', 'rate_limited', 'internal'];
+const ANIM_STATES: readonly AnimState[] = ['idle', 'walk', 'run'];
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -31,6 +34,21 @@ function isBoundedString(value: unknown, min: number, max: number): value is str
   return typeof value === 'string' && value.length >= min && value.length <= max;
 }
 
+/** Valide une entité de snapshot (EntityState). */
+export function isEntityState(value: unknown): value is EntityState {
+  return (
+    isRecord(value) &&
+    isBoundedString(value.id, 1, 64) &&
+    value.kind === 'player' &&
+    isBoundedString(value.name, 0, 24) &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.aim) &&
+    typeof value.anim === 'string' &&
+    (ANIM_STATES as readonly string[]).includes(value.anim)
+  );
+}
+
 /** Garde de type sur le discriminant `t`. */
 export function isServerMessageType(value: unknown): value is ServerMessageType {
   return typeof value === 'string' && (SERVER_MESSAGE_TYPES as readonly string[]).includes(value);
@@ -48,7 +66,11 @@ const PAYLOAD_VALIDATORS: {
     isBoundedString(d.zone_id, 1, 64) &&
     isBoundedString(d.character_id, 1, 64) &&
     isIntAtLeast(d.tick_rate, 1) &&
-    isNonNegative(d.server_time),
+    isNonNegative(d.server_time) &&
+    isBoundedString(d.entity_id, 1, 64) &&
+    isBoundedString(d.map_id, 1, 64),
+  snapshot: (d): d is UnknownRecord & ServerPayloads['snapshot'] =>
+    isIntAtLeast(d.ack_seq, 0) && Array.isArray(d.entities) && d.entities.every(isEntityState),
   pong: (d): d is UnknownRecord & ServerPayloads['pong'] =>
     isNonNegative(d.client_time) && isNonNegative(d.server_time),
   error: (d): d is UnknownRecord & ServerPayloads['error'] =>

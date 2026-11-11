@@ -7,8 +7,22 @@ from typing import Any
 
 import pytest
 
-from app.protocol.codec import MAX_CLIENT_MESSAGE_BYTES, ProtocolError, decode_client, encode_server
-from app.protocol.generated import ErrorPayload, PingPayload, PongPayload
+from app.protocol.codec import (
+    MAX_CLIENT_MESSAGE_BYTES,
+    ProtocolError,
+    decode_client,
+    encode_entity,
+    encode_server,
+    encode_snapshot,
+)
+from app.protocol.generated import (
+    EntityState,
+    ErrorPayload,
+    InputPayload,
+    PingPayload,
+    PongPayload,
+    SnapshotPayload,
+)
 
 
 def _raw(**envelope: Any) -> str:
@@ -101,3 +115,45 @@ def test_encode_rejects_mismatched_payload() -> None:
 
 def test_protocol_error_message_is_truncated() -> None:
     assert len(ProtocolError("internal", "x" * 1000).message) == 200
+
+
+def test_decode_input() -> None:
+    envelope = decode_client(
+        _raw(t="input", seq=12, d={"move_x": -1, "move_y": 0.5, "aim": 3.1, "sprint": True})
+    )
+    assert (envelope.t, envelope.seq) == ("input", 12)
+    assert envelope.payload == InputPayload(move_x=-1.0, move_y=0.5, aim=3.1, sprint=True)
+
+
+@pytest.mark.parametrize(
+    "d",
+    [
+        {"move_x": 1.01, "move_y": 0, "aim": 0, "sprint": False},
+        {"move_x": 0, "move_y": -2, "aim": 0, "sprint": False},
+        {"move_x": 0, "move_y": 0, "aim": 7.5, "sprint": False},
+        {"move_x": 0, "move_y": 0, "aim": 0, "sprint": 1},
+        {"move_x": "0", "move_y": 0, "aim": 0, "sprint": False},
+        {"move_x": 0, "move_y": 0, "aim": 0},
+        {"move_x": 0, "move_y": 0, "aim": 0, "sprint": False, "dash": True},
+    ],
+)
+def test_decode_input_out_of_bounds(d: dict[str, Any]) -> None:
+    _expect_error(_raw(t="input", seq=1, d=d), "bad_message")
+
+
+def test_snapshot_fast_path_matches_encode_server() -> None:
+    entities = [
+        EntityState(id="p1", kind="player", name="Élise", x=64.15, y=1e-7, aim=-3.0, anim="walk"),
+        EntityState(id="p2", kind="player", name="", x=0.0, y=127.7, aim=0.0, anim="idle"),
+    ]
+    fast = encode_snapshot(5, 99, 3, [encode_entity(e) for e in entities])
+    reference = encode_server("snapshot", 5, 99, SnapshotPayload(ack_seq=3, entities=entities))
+    assert json.loads(fast) == json.loads(reference)
+    assert json.loads(encode_snapshot(1, 2, 0, [])) == {
+        "t": "snapshot",
+        "seq": 1,
+        "tick": 2,
+        "d": {"ack_seq": 0, "entities": []},
+    }
+    with pytest.raises(ValueError):
+        encode_snapshot(1, 1, -1, [])

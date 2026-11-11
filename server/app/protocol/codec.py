@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from app.protocol.generated import (
     CLIENT_MESSAGES,
     SERVER_MESSAGES,
+    EntityState,
     ErrorCode,
     ProtocolModel,
     ServerMessageType,
@@ -104,3 +105,24 @@ def encode_server(t: ServerMessageType, seq: int, tick: int, payload: ProtocolMo
         raise TypeError(f"charge utile {type(payload).__name__} incompatible avec le message `{t}`")
     envelope = {"t": t, "seq": seq, "tick": tick, "d": payload.model_dump(mode="json")}
     return json.dumps(envelope, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def encode_entity(entity: EntityState) -> str:
+    """Sérialise une entité une seule fois par tick, pour la réutiliser dans plusieurs snapshots."""
+    return entity.model_dump_json()
+
+
+def encode_snapshot(seq: int, tick: int, ack_seq: int, entities_json: list[str]) -> str:
+    """Message `snapshot` assemblé à partir d'entités déjà sérialisées par `encode_entity`.
+
+    Chemin rapide de la boucle de tick : chaque entité est validée et sérialisée une fois, puis
+    recopiée telle quelle dans le snapshot de chaque joueur qui la voit. Le résultat est le même
+    JSON que `encode_server("snapshot", …)` (vérifié par les tests du codec).
+    """
+    if ack_seq < 0:
+        raise ValueError("ack_seq doit être ≥ 0")
+    entities = ",".join(entities_json)
+    return (
+        f'{{"t":"snapshot","seq":{int(seq)},"tick":{int(tick)},'
+        f'"d":{{"ack_seq":{int(ack_seq)},"entities":[{entities}]}}}}'
+    )
