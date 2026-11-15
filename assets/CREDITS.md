@@ -33,9 +33,8 @@ Régénérer : `python3 -I tools/assets/build_assets.py [dossier 2d des packs Ke
 
 ## Personnage modulaire (création originale)
 
-`sprites/character/*.png` : corps de base (2 sexes × 4 couleurs de peau), cheveux (3 coupes × 4 couleurs)
-et pièces équipables (pantalon, veste, casque, casquette, sac à dos, combinaison de protection en 3 pièces).
-Style 16 bits, cadres de 32 × 48 px, 4 directions par planche (bas, gauche, droite, haut). Entièrement dessiné par
-`tools/assets/character.py` (aucun asset externe, aucune image d'un autre jeu). Licence : celle du projet.
+`characters/` : corps neutre de profil et équipements superposables (canvas 64 × 64, 3 sous-calques),
+plus `character.config.json`. Entièrement dessiné par `tools/assets/character.py` (aucun asset externe,
+aucune image d'un autre jeu). Licence : celle du projet. Voir `docs/sprites/systeme-modulaire.md`.
 
-Régénérer : `python3 -I tools/assets/character.py`
+Régénérer : `python3 -I tools/assets/character.py` (`--check` pour vérifier l'alignement).

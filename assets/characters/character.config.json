@@ -1,0 +1,138 @@
+{
+  "_comment": "AUTO-GÉNÉRÉ par tools/assets/character.py. Ne pas modifier à la main.",
+  "canvas": {
+    "width": 64,
+    "height": 64,
+    "origin": "top-left",
+    "ground_y": 56,
+    "facing": "right",
+    "mirror_for_left": true,
+    "pivot": [
+      32,
+      56
+    ]
+  },
+  "anchors": {
+    "head": [
+      32,
+      27
+    ],
+    "neck": [
+      31,
+      34
+    ],
+    "shoulder_near": [
+      30,
+      37
+    ],
+    "shoulder_far": [
+      36,
+      37
+    ],
+    "torso": [
+      32,
+      40
+    ],
+    "back": [
+      26,
+      39
+    ],
+    "pelvis": [
+      32,
+      45
+    ],
+    "hand_near": [
+      27,
+      46
+    ],
+    "hand_far": [
+      40,
+      45
+    ],
+    "foot_near": [
+      30,
+      55
+    ],
+    "foot_far": [
+      36,
+      55
+    ],
+    "ground": [
+      32,
+      56
+    ]
+  },
+  "sublayers": [
+    "back",
+    "mid",
+    "front"
+  ],
+  "categories": [
+    "head",
+    "torso",
+    "legs",
+    "feet",
+    "back",
+    "hands",
+    "weapons"
+  ],
+  "render_order": [
+    "back:back",
+    "body:back",
+    "legs:back",
+    "feet:back",
+    "torso:back",
+    "hands:back",
+    "weapons:back",
+    "body:mid",
+    "legs:mid",
+    "feet:mid",
+    "torso:mid",
+    "back:mid",
+    "head:mid",
+    "head:front",
+    "weapons:mid",
+    "body:front",
+    "torso:front",
+    "hands:front",
+    "weapons:front",
+    "back:front"
+  ],
+  "base": {
+    "back": "base/body_back.png",
+    "mid": "base/body_mid.png",
+    "front": "base/body_front.png"
+  },
+  "items": {
+    "veste_kaki": {
+      "category": "torso",
+      "layers": {
+        "back": "equipment/torso/veste_kaki_back.png",
+        "mid": "equipment/torso/veste_kaki_mid.png",
+        "front": "equipment/torso/veste_kaki_front.png"
+      },
+      "covers": [
+        "torso",
+        "arm_near",
+        "arm_far"
+      ],
+      "requires": [],
+      "hides": [],
+      "conflicts": []
+    },
+    "casque_militaire": {
+      "category": "head",
+      "layers": {
+        "front": "equipment/head/casque_militaire_front.png"
+      },
+      "covers": [],
+      "requires": [],
+      "hides": [
+        "head:hair_top"
+      ],
+      "conflicts": [
+        "head:hood"
+      ]
+    }
+  }
+}
