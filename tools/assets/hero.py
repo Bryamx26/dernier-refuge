@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PIL import Image
 
-# Canvas 24 × 64 : personnage de 60 px de haut, tête ≈ 1/6 du corps, pieds posés en bas du dessin.
+# Canvas 24 × 64 : personnage de 54 px de haut, jambes raccourcies à la demande de bryam, pieds posés en bas du dessin.
 _ROWS = [
     ".........oooooo.........",
     ".......oohHHHHhoo.......",
@@ -44,10 +44,10 @@ _ROWS = [
     ".....ooopPPpqpppooo.....",
     *[".......opPPpqpppo......."] * 2,
     ".......opPpqqpppo.......",
-    *[".......opPpqpppqo......."] * 6,
+    *[".......opPpqpppqo......."] * 4,
     ".......oPppqppqqo.......",
-    *[".......opPpqpppqo......."] * 7,
-    *[".......obBbcbbbco......."] * 5,
+    *[".......opPpqpppqo......."] * 4,
+    *[".......obBbcbbbco......."] * 4,
     *["......obBbbcbbbbco......"] * 2,
     "......occcccccccco......",
     ".......oooooooooo.......",
