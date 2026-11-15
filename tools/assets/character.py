@@ -1,445 +1,603 @@
-"""Personnage modulaire « poupée de papier » : corps de base + pièces équipables.
+"""Personnage modulaire « poupée de papier », style 16 bits : corps de base + pièces équipables.
 
 Création originale du projet (aucun asset externe) : tout est dessiné par ce script, de façon
-déterministe. Un personnage est un empilement de calques de même taille (24 × 32 px) :
+déterministe. Un personnage est un empilement de calques de même taille (32 × 48 px) :
 
     corps (sexe, couleur de peau) < pantalon < veste < cheveux < couvre-chef < sac à dos
 
-Le corps est décrit par des grilles de « régions » (tête, torse, bras, jambes...). Les vêtements
-ne sont pas dessinés à la main : ils sont calculés à partir des régions du corps (le pantalon
-recouvre les jambes, la veste le torse et les bras, etc.). Quand le corps sera animé, les
-vêtements suivront donc automatiquement chaque pose.
+Le corps est un petit squelette : chaque membre est une forme (capsule, ellipse, rectangle) posée
+entre des articulations. Les vêtements sont calculés à partir de ces mêmes formes (le pantalon
+recouvre les jambes, la veste le torse et les bras, un peu plus amples). Animer le personnage
+reviendra à déplacer les articulations : toutes les pièces suivront.
+
+Rendu : chaque matière a une rampe de 4 teintes (clair, base, ombre, ombre profonde) avec un
+léger décalage de teinte, lumière en haut à gauche, contour sombre, puis des détails posés à la
+main (visage, poches, fermeture, boucles, reflets).
 
 Planche d'un calque : 4 cadres côte à côte, dans l'ordre DIRECTIONS (bas, gauche, droite, haut).
 """
 
 from __future__ import annotations
 
-from PIL import Image
+import colorsys
+import math
+from dataclasses import dataclass
 
-FRAME_W, FRAME_H = 24, 32
-OFF_X, OFF_Y = 5, 3
-GRID_W = 14
+from PIL import Image, ImageOps
+
+FRAME_W, FRAME_H = 32, 48
 DIRECTIONS = ("down", "left", "right", "up")
 
-RGBA = tuple[int, int, int, int]
-Pixels = dict[tuple[int, int], RGBA]
-
-# --------------------------------------------------------------------------- corps (régions)
-# h tête · e œil · k cou · t torse · c poitrine (sous-vêtement haut) · a/b bras · n main
-# u bassin (sous-vêtement) · l/m jambes · f pied.  Ligne 0 : réservée aux couvre-chefs.
-_FRONT_M = """
-..............
-....hhhhhh....
-...hhhhhhhh...
-...hhhhhhhh...
-...hhehhehh...
-...hhhhhhhh...
-...hhhhhhhh...
-....hhhhhh....
-.....kkkk.....
-..attttttttb..
-.aattttttttbb.
-.aattttttttbb.
-.aattttttttbb.
-.aattttttttbb.
-.aattttttttbb.
-.nnuuuuuuuunn.
-.nnuuuuuuuunn.
-...llllmmmm...
-...llllmmmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-..ffff..ffff..
-"""
-
-_FRONT_F = """
-..............
-....hhhhhh....
-...hhhhhhhh...
-...hhhhhhhh...
-...hhehhehh...
-...hhhhhhhh...
-...hhhhhhhh...
-....hhhhhh....
-.....kkkk.....
-...tttttttt...
-.aaccccccccbb.
-.aaccccccccbb.
-.aa.tttttt.bb.
-.aa.tttttt.bb.
-.aattttttttbb.
-.nnuuuuuuuunn.
-.nnuuuuuuuunn.
-...llllmmmm...
-...llllmmmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-...lll..mmm...
-..ffff..ffff..
-"""
-
-_SIDE_M = """
-..............
-....hhhhhh....
-...hhhhhhhh...
-...hhhhhhhh...
-...hhhhhheh...
-...hhhhhhhhh..
-...hhhhhhhh...
-....hhhhhh....
-.....kkk......
-....tttttt....
-....ttaatt....
-....ttaatt....
-....ttaatt....
-....ttaatt....
-....ttaatt....
-....uunnuu....
-....uunnuu....
-....mlllll....
-....mlllll....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....fffff....
-"""
-
-_SIDE_F = """
-..............
-....hhhhhh....
-...hhhhhhhh...
-...hhhhhhhh...
-...hhhhhheh...
-...hhhhhhhhh..
-...hhhhhhhh...
-....hhhhhh....
-.....kkk......
-....tttttt....
-....ccaaccc...
-....ccaaccc...
-.....taatt....
-.....taatt....
-....ttaatt....
-....uunnuu....
-....uunnuu....
-....mlllll....
-....mlllll....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....mlll.....
-.....fffff....
-"""
+RGB = tuple[int, int, int]
+Pt = tuple[int, int]
+Shape = set[Pt]
 
 
-def _rows(text: str) -> list[str]:
-    rows = [r for r in text.strip("\n").split("\n")]
-    assert all(len(r) == GRID_W for r in rows), [len(r) for r in rows]
-    return rows
+# --------------------------------------------------------------------------- formes
+def ellipse(cx: float, cy: float, rx: float, ry: float) -> Shape:
+    return {
+        (x, y)
+        for y in range(FRAME_H)
+        for x in range(FRAME_W)
+        if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1.0
+    }
 
 
-def _mirror(rows: list[str]) -> list[str]:
-    swap = str.maketrans("ab", "ba")
-    return [r[::-1].translate(swap) for r in rows]
+def rect(x0: int, y0: int, x1: int, y1: int) -> Shape:
+    return {(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)}
 
 
-def body_grid(sex: str, direction: str) -> list[str]:
-    front = _rows(_FRONT_M if sex == "m" else _FRONT_F)
-    side = _rows(_SIDE_M if sex == "m" else _SIDE_F)
-    if direction == "down":
-        return front
-    if direction == "up":
-        return [r.replace("e", "h") for r in front]
-    return side if direction == "right" else _mirror(side)
+def capsule(ax: float, ay: float, bx: float, by: float, r: float) -> Shape:
+    out = set()
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy or 1.0
+    for y in range(FRAME_H):
+        for x in range(FRAME_W):
+            px, py = x + 0.5 - ax, y + 0.5 - ay
+            t = max(0.0, min(1.0, (px * dx + py * dy) / length2))
+            if math.hypot(px - t * dx, py - t * dy) <= r:
+                out.add((x, y))
+    return out
 
 
-def _regions(rows: list[str]) -> dict[tuple[int, int], str]:
-    return {(x, y): ch for y, r in enumerate(rows) for x, ch in enumerate(r) if ch != "."}
+def widen(shape: Shape, n: int = 1) -> Shape:
+    """Élargit horizontalement de n pixels de chaque côté (vêtement ample)."""
+    return {(x + d, y) for (x, y) in shape for d in range(-n, n + 1)}
+
+
+def flip(shape: Shape) -> Shape:
+    return {(FRAME_W - 1 - x, y) for (x, y) in shape}
 
 
 # --------------------------------------------------------------------------- couleurs
-def _mul(c: tuple[int, int, int], k: float) -> RGBA:
-    return (min(255, round(c[0] * k)), min(255, round(c[1] * k)), min(255, round(c[2] * k)), 255)
+def ramp(base: RGB) -> list[RGB]:
+    """Rampe 16 bits : clair (tire vers le chaud), base, ombre et ombre profonde (vers le froid)."""
+    h, l, s = colorsys.rgb_to_hls(*(c / 255 for c in base))
+
+    def tone(dl: float, dh: float, ds: float) -> RGB:
+        r, g, b = colorsys.hls_to_rgb((h + dh) % 1.0, max(0.0, min(1.0, l * dl)), max(0.0, min(1.0, s * ds)))
+        return (round(r * 255), round(g * 255), round(b * 255))
+
+    # Les teintes claires (peau, tissu clair) se désaturent dans l'ombre pour ne pas virer à l'orange.
+    k = 1.0 - 0.45 * max(0.0, l - 0.45)
+    return [tone(1.1, 0.012, 0.9), base, tone(0.78, -0.015, 0.92 * k), tone(0.58, -0.03, 0.85 * k)]
 
 
-SKINS = {
-    "claire": (244, 205, 170),
-    "mate": (214, 164, 120),
-    "brune": (160, 108, 72),
-    "noire": (104, 68, 48),
+def darker(c: RGB, k: float) -> RGB:
+    return (round(c[0] * k), round(c[1] * k), round(c[2] * k))
+
+
+SKINS: dict[str, RGB] = {
+    "claire": (240, 198, 162),
+    "mate": (212, 160, 116),
+    "brune": (158, 106, 72),
+    "noire": (104, 68, 50),
 }
-HAIR_COLORS = {
-    "noir": (44, 38, 40),
-    "brun": (98, 62, 36),
-    "blond": (214, 176, 92),
-    "roux": (176, 78, 36),
+HAIR_COLORS: dict[str, RGB] = {
+    "noir": (52, 46, 52),
+    "brun": (108, 68, 40),
+    "blond": (218, 178, 94),
+    "roux": (184, 84, 40),
 }
-UNDERWEAR = (86, 96, 110)
-EYE = (30, 24, 28, 255)
-
-CLOTHES = {
-    "veste": (92, 104, 68),  # kaki
-    "pantalon": (62, 78, 112),  # jean
-    "chaussures": (58, 44, 36),
-    "casque": (78, 92, 70),
-    "casquette": (150, 54, 46),
-    "sac": (120, 92, 56),
-    "combi": (206, 204, 190),  # combinaison de protection, gris clair
-    "combi_bande": (226, 126, 40),
-    "combi_bottes": (60, 62, 68),
-    "combi_verre": (96, 196, 190),
-    "combi_filtre": (52, 54, 60),
+MATERIALS: dict[str, RGB] = {
+    "sousvet": (112, 122, 138),
+    "jean": (64, 86, 132),
+    "cuir": (96, 64, 44),
+    "kaki": (104, 116, 72),
+    "casque": (86, 100, 76),
+    "casquette": (164, 58, 50),
+    "sac": (136, 104, 62),
+    "combi": (212, 208, 190),
+    "caoutchouc": (62, 64, 72),
+    "verre": (84, 188, 184),
+    "orange": (230, 128, 40),
+    "laiton": (216, 176, 80),
 }
 
 
-# --------------------------------------------------------------------------- rendu d'un calque
-def _shade(pixels: dict[tuple[int, int], tuple[int, int, int]], light: float = 1.0) -> Pixels:
-    """Ombrage simple, lumière en haut à gauche : bord droit et bas plus sombres."""
-    out: Pixels = {}
-    for (x, y), c in pixels.items():
-        k = light
-        if (x + 1, y) not in pixels:
-            k *= 0.84
-        if (x, y + 1) not in pixels:
-            k *= 0.88
-        out[(x, y)] = _mul(c, k)
+# --------------------------------------------------------------------------- squelette
+@dataclass(frozen=True)
+class Part:
+    name: str
+    shape: frozenset
+
+
+def _p(name: str, shape: Shape) -> Part:
+    return Part(name, frozenset(shape))
+
+
+def body_parts(sex: str, view: str) -> list[Part]:
+    """Membres du corps, du plus éloigné au plus proche. `view` : front | back | side (regard à droite)."""
+    f = sex == "f"
+    if view in ("front", "back"):
+        leg_l = capsule(13.5, 31, 13.5, 43, 2.0 if not f else 1.9)
+        foot_l = rect(10, 44, 14, 45)
+        arm_l = capsule(10.2, 20.4, 9.8, 28.6, 1.3) if f else capsule(9.5, 20.2, 9.0, 28.8, 1.6)
+        hand_l = ellipse(9.8 if f else 9.0, 30.6, 1.5, 1.9)
+        if f:
+            torso = rect(11, 18, 20, 23) | rect(12, 24, 19, 27)
+            pelvis = rect(11, 28, 20, 31)
+        else:
+            torso = rect(10, 18, 21, 19) | rect(11, 20, 20, 27)
+            pelvis = rect(11, 28, 20, 31)
+        return [
+            _p("leg_l", leg_l), _p("leg_r", flip(leg_l)), _p("foot_l", foot_l), _p("foot_r", flip(foot_l)),
+            _p("pelvis", pelvis), _p("torso", torso), _p("neck", rect(14, 16, 17, 17)),
+            _p("arm_l", arm_l), _p("arm_r", flip(arm_l)), _p("hand_l", hand_l), _p("hand_r", flip(hand_l)),
+            _p("head", ellipse(16, 10.5, 5.0, 5.8)),
+        ]
+    torso = rect(13, 18, 19, 27) | (rect(14, 19, 20, 23) if not f else rect(14, 20, 20, 22))
+    if f:
+        torso -= rect(19, 24, 19, 27)
+    return [
+        _p("leg_far", capsule(15.0, 31, 14.8, 43, 1.9)), _p("foot_far", rect(13, 44, 18, 45)),
+        _p("leg_near", capsule(16.6, 31, 16.4, 43, 2.1)), _p("foot_near", rect(14, 44, 20, 45)),
+        _p("pelvis", rect(13, 28, 19, 31)), _p("torso", torso), _p("neck", rect(15, 16, 17, 17)),
+        _p("head", ellipse(16.3, 10.5, 5.0, 5.8) | {(21, 12)}),
+        _p("arm", capsule(16.0, 20.2, 16.4, 28.8, 1.3 if f else 1.6)), _p("hand", ellipse(16.5, 30.6, 1.5, 1.9)),
+    ]
+
+
+def silhouette(parts: list[Part]) -> Shape:
+    out: Shape = set()
+    for p in parts:
+        out |= p.shape
     return out
 
 
-def _outline(pixels: Pixels, body: set[tuple[int, int]], color: RGBA) -> Pixels:
-    """Contour extérieur : uniquement hors du calque ET hors de la silhouette du corps."""
-    out = dict(pixels)
-    for x, y in list(pixels):
-        for p in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            if p not in pixels and p not in body:
-                out[p] = color
-    return out
+# --------------------------------------------------------------------------- rendu
+@dataclass
+class Piece:
+    """Un morceau de calque : forme + matière. L'ordre dans la liste = ordre de superposition."""
+
+    shape: Shape
+    color: RGB
 
 
-def _frame(pixels: Pixels) -> Image.Image:
+def render(pieces: list[Piece], body: Shape, details: dict[Pt, RGB] | None = None,
+           tones: dict[Pt, int] | None = None) -> Image.Image:
+    """Ombre chaque morceau, trace le contour hors silhouette du corps, pose les détails."""
+    owner: dict[Pt, int] = {}
+    for i, piece in enumerate(pieces):
+        for pt in piece.shape:
+            if 0 <= pt[0] < FRAME_W and 0 <= pt[1] < FRAME_H:
+                owner[pt] = i
+    ramps = [ramp(p.color) for p in pieces]
     img = Image.new("RGBA", (FRAME_W, FRAME_H), (0, 0, 0, 0))
-    for (x, y), c in pixels.items():
-        px, py = x + OFF_X, y + OFF_Y
-        if 0 <= px < FRAME_W and 0 <= py < FRAME_H:
-            img.putpixel((px, py), c)
+    for (x, y), i in owner.items():
+        xl = x
+        while owner.get((xl - 1, y)) == i:
+            xl -= 1
+        xr = x
+        while owner.get((xr + 1, y)) == i:
+            xr += 1
+        w, pos = xr - xl + 1, x - xl
+        tone = 1
+        if (w >= 3 and pos == 0) or (w >= 7 and pos == 1):
+            tone = 0
+        if owner.get((x, y - 1)) != i and tone == 1 and pos < w * 0.6:
+            tone = 0
+        if (w >= 2 and pos == w - 1) or (w >= 6 and pos >= w - 2):
+            tone = 2
+        if owner.get((x, y + 1)) != i:
+            tone = max(tone, 2)
+        # Ombre portée : ce morceau passe sous un morceau plus proche, à droite ou en dessous.
+        for n in ((x + 1, y), (x, y + 1)):
+            j = owner.get(n)
+            if j is not None and j > i:
+                tone = 3
+        if tones and (x, y) in tones:
+            tone = tones[(x, y)]
+        img.putpixel((x, y), (*ramps[i][tone], 255))
+    for (x, y), i in list(owner.items()):
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if n not in owner and n not in body and 0 <= n[0] < FRAME_W and 0 <= n[1] < FRAME_H:
+                img.putpixel(n, (*darker(ramps[i][3], 0.55), 255))
+    for pt, c in (details or {}).items():
+        if 0 <= pt[0] < FRAME_W and 0 <= pt[1] < FRAME_H:
+            img.putpixel(pt, (*c, 255))
     return img
 
 
-def _rows_of(reg: dict[tuple[int, int], str], chars: str) -> list[int]:
-    return sorted({y for (x, y), ch in reg.items() if ch in chars})
+def _named(parts: list[Part], *prefixes: str) -> list[Part]:
+    return [p for p in parts if p.name.startswith(prefixes)]
 
 
-# --------------------------------------------------------------------------- calques
-def layer_body(reg, direction: str, skin: tuple[int, int, int]) -> Pixels:
-    flat: dict[tuple[int, int], tuple[int, int, int]] = {}
-    for p, ch in reg.items():
-        if ch in "uc":
-            flat[p] = UNDERWEAR
-        elif ch in "ab":
-            flat[p] = _mul(skin, 0.9)[:3]
-        elif ch in "km":
-            flat[p] = _mul(skin, 0.86)[:3]
+def _rows(shape: Shape) -> tuple[int, int]:
+    ys = [y for _, y in shape]
+    return min(ys), max(ys)
+
+
+def _row(shape: Shape, y: int) -> list[int]:
+    return sorted(x for (x, yy) in shape if yy == y)
+
+
+# --------------------------------------------------------------------------- corps
+def draw_body(sex: str, view: str, skin: RGB) -> Image.Image:
+    parts = body_parts(sex, view)
+    sk = ramp(skin)
+    under = ramp(MATERIALS["sousvet"])
+    pieces = [Piece(set(p.shape), skin) for p in parts]
+    det: dict[Pt, RGB] = {}
+    pelvis = next(p for p in parts if p.name == "pelvis").shape
+    torso = next(p for p in parts if p.name == "torso").shape
+    # Sous-vêtements : slip (ceinture claire) ; brassière pour le corps féminin.
+    y0, y1 = _rows(pelvis)
+    for (x, y) in pelvis:
+        edge = x == _row(pelvis, y)[-1]
+        det[(x, y)] = under[0] if y == y0 else under[2] if (edge or y == y1) else under[1]
+    if sex == "f":
+        for (x, y) in torso:
+            if 20 <= y <= 22:
+                xs = _row(torso, y)
+                det[(x, y)] = under[0] if y == 20 and x < xs[-1] - 1 else under[2] if (x >= xs[-1] - 1 or y == 22) else under[1]
+    eye, white = (34, 28, 36), (244, 240, 232)
+    brow = darker(sk[3], 0.8)
+    lips = (188, 96, 92) if sex == "f" else sk[3]
+    if view == "front":
+        det.update({(13, 11): white, (14, 11): eye, (17, 11): eye, (18, 11): white})
+        det.update({(13, 9): brow, (14, 9): brow, (17, 9): brow, (18, 9): brow})
+        det.update({(16, 12): sk[2], (16, 13): sk[2], (15, 14): lips, (16, 14): lips})
+        det.update({(10, 11): sk[1], (10, 12): sk[2], (21, 11): sk[2], (21, 12): sk[3]})  # oreilles
+        if sex == "m":
+            det.update({(13, 23): sk[2], (14, 23): sk[2], (17, 23): sk[2], (18, 23): sk[2], (16, 26): sk[2]})  # pectoraux, nombril
         else:
-            flat[p] = skin
-    px = _shade(flat)
-    for p, ch in reg.items():
-        if ch == "e":
-            px[p] = EYE
-    return _outline(px, set(), _mul(skin, 0.36))
+            det.update({(13, 10): eye, (18, 10): eye})  # cils
+        det.update({(15, 17): sk[2], (16, 17): sk[2], (17, 17): sk[3]})
+    elif view == "side":
+        det.update({(18, 11): white, (19, 11): eye, (18, 9): brow, (19, 9): brow, (19, 14): lips, (20, 14): lips})
+        det.update({(15, 11): sk[2], (15, 12): sk[3], (14, 11): sk[2]})  # oreille
+        if sex == "f":
+            det[(19, 10)] = eye
+    else:
+        det.update({(10, 11): sk[1], (10, 12): sk[2], (21, 11): sk[2], (21, 12): sk[3]})
+        det.update({(15, 22): sk[2], (16, 22): sk[2], (15, 25): sk[2], (16, 25): sk[2]})  # colonne
+    if view != "side":
+        for x in (10, 21):  # contour des oreilles
+            det.setdefault((x, 10), darker(sk[3], 0.55))
+            det.setdefault((x, 13), darker(sk[3], 0.55))
+    return render(pieces, set(), det)
 
 
-def layer_pants(reg, direction: str, color, shoes, boots_rows: int = 0) -> Pixels:
-    legs = _rows_of(reg, "lm")
-    last = legs[-1]
-    flat = {}
-    for p, ch in reg.items():
-        if ch in "ulm":
-            flat[p] = _mul(color, 0.9)[:3] if ch == "m" else color
-            if boots_rows and p[1] > last - boots_rows:
-                flat[p] = shoes
-        elif ch == "f":
-            flat[p] = shoes
-    px = _shade(flat)
-    belt = _rows_of(reg, "u")[0]
-    for p, ch in reg.items():
-        if ch == "u" and p[1] == belt:
-            px[p] = _mul(color, 0.62)
-    return _outline(px, set(reg), _mul(color, 0.4))
+# --------------------------------------------------------------------------- vêtements
+def draw_pants(sex: str, view: str, color: RGB, boots: RGB, baggy: bool = False, tall_boots: int = 2,
+               band: RGB | None = None) -> Image.Image:
+    parts = body_parts(sex, view)
+    body = silhouette(parts)
+    cut = 44 - tall_boots
+    pieces: list[Piece] = []
+    for p in _named(parts, "leg"):
+        shape = widen(set(p.shape)) if baggy else set(p.shape)
+        pieces.append(Piece({q for q in shape if q[1] < cut}, color))
+    pelvis = set(next(p for p in parts if p.name == "pelvis").shape)
+    pieces.append(Piece(widen(pelvis) if baggy else pelvis, color))
+    boot_shapes = []
+    for leg, foot in zip(_named(parts, "leg"), _named(parts, "foot")):
+        shape = widen({q for q in leg.shape if q[1] >= cut}) | set(foot.shape) | {(x, y - 1) for (x, y) in foot.shape if y == 44}
+        boot_shapes.append(shape)
+        pieces.append(Piece(shape, boots))
+    r, b = ramp(color), ramp(boots)
+    det: dict[Pt, RGB] = {}
+    for shape in boot_shapes:
+        y1 = _rows(shape)[1]
+        for (x, y) in shape:
+            if y == y1:
+                det[(x, y)] = darker(b[3], 0.7)  # semelle
+            if band and y == cut:
+                det[(x, y)] = band
+    y0 = _rows(pelvis)[0]
+    if not baggy:  # ceinture, boucle, poches, braguette, pli du genou
+        belt = ramp(MATERIALS["cuir"])
+        for x in _row(pieces[-len(boot_shapes) - 1].shape, y0):
+            det[(x, y0)] = belt[2]
+        if view == "front":
+            det.update({(15, y0): MATERIALS["laiton"], (16, y0): MATERIALS["laiton"]})
+            det.update({(12, y0 + 2): r[2], (13, y0 + 1): r[2], (19, y0 + 2): r[2], (18, y0 + 1): r[2], (16, y0 + 1): r[2], (16, y0 + 2): r[2]})
+            det.update({(12, 37): r[2], (13, 37): r[2], (18, 37): r[2], (19, 37): r[2]})
+        elif view == "back":
+            det.update({(12, y0 + 2): r[2], (13, y0 + 2): r[2], (14, y0 + 2): r[2], (17, y0 + 2): r[2], (18, y0 + 2): r[2], (19, y0 + 2): r[2]})
+            det.update({(12, y0 + 3): r[2], (14, y0 + 3): r[2], (17, y0 + 3): r[2], (19, y0 + 3): r[2]})
+        else:
+            det.update({(15, y0 + 1): r[2], (16, y0 + 2): r[2], (16, y0 + 3): r[2], (17, 37): r[2], (18, 37): r[2]})
+    else:  # plis de la combinaison
+        if view == "side":
+            det.update({(16, 36): r[2], (17, 37): r[2], (18, 37): r[2], (15, 33): r[2]})
+        else:
+            det.update({(12, 36): r[2], (13, 37): r[2], (19, 36): r[2], (18, 37): r[2], (15, 32): r[3], (16, 32): r[3]})
+    return render(pieces, body, det)
 
 
-def layer_jacket(reg, direction: str, color, detail: str = "zip", gloves=None) -> Pixels:
-    torso_rows = _rows_of(reg, "tc")
-    flat = {}
-    for p, ch in reg.items():
-        if ch in "tc":
-            flat[p] = color
-        elif ch in "ab":
-            flat[p] = _mul(color, 0.86)[:3]
-    # La veste est ample : on comble les creux de la taille entre les bras.
-    for y in torso_rows:
-        xs = [x for (x, yy) in flat if yy == y]
-        for x in range(min(xs), max(xs) + 1):
-            flat.setdefault((x, y), color)
-    hem = _rows_of(reg, "u")[0]
-    for p, ch in reg.items():
-        if ch == "u" and p[1] == hem:
-            flat[p] = color
-        if gloves and ch == "n":
-            flat[p] = gloves
-    px = _shade(flat)
-    for p, ch in reg.items():
-        if ch == "k":
-            px[p] = _mul(color, 0.7)  # col
-        if ch == "u" and p[1] == hem:
-            px[p] = _mul(color, 0.7)  # ourlet
-    if detail == "zip" and direction == "down":
-        cx = (min(x for x, _ in reg) + max(x for x, _ in reg)) // 2 + 1
-        for y in torso_rows:
-            px[(cx, y)] = _mul(color, 0.66)
-    if detail == "band":
-        y = torso_rows[2]
-        for p, ch in reg.items():
-            if p[1] == y and ch in "ab":
-                px[p] = _mul(CLOTHES["combi_bande"], 1.0)
-    return _outline(px, set(reg), _mul(color, 0.4))
+def draw_jacket(sex: str, view: str, color: RGB, style: str) -> Image.Image:
+    """style = « veste » (col, fermeture, poches) ou « combi » (coutures, brassards, gants)."""
+    parts = body_parts(sex, view)
+    body = silhouette(parts)
+    torso = set(next(p for p in parts if p.name == "torso").shape)
+    pelvis = next(p for p in parts if p.name == "pelvis").shape
+    py0 = _rows(pelvis)[0]
+    trunk = widen(torso) | widen({q for q in pelvis if q[1] <= py0 + 1})
+    ty0, ty1 = _rows(trunk)
+    # Comble la taille : une veste tombe droit depuis les épaules.
+    for y in range(ty0, ty1 + 1):
+        xs = _row(trunk, y)
+        trunk |= {(x, y) for x in range(xs[0], xs[-1] + 1)}
+    neck = next(p for p in parts if p.name == "neck").shape
+    collar = widen({q for q in neck if q[1] == 17})
+    sleeves = [Piece(widen(set(p.shape)), color) for p in _named(parts, "arm")]
+    gloves = [Piece(widen(set(p.shape)) | set(p.shape), MATERIALS["caoutchouc"]) for p in _named(parts, "hand")] if style == "combi" else []
+    if view == "side":
+        pieces = [Piece(trunk | collar, color)] + sleeves + gloves
+    else:
+        pieces = sleeves + gloves + [Piece(trunk | collar, color)]
+    r = ramp(color)
+    det: dict[Pt, RGB] = {}
+    for x in _row(trunk, ty1):
+        det[(x, ty1)] = r[3]  # ourlet
+    for s in sleeves:  # poignets
+        y1 = _rows(s.shape)[1]
+        for x in _row(s.shape, y1):
+            det[(x, y1)] = r[3]
+    if style == "veste":
+        if view == "front":
+            for y in range(19, ty1):
+                det[(16, y)] = r[3]
+                det[(15, y)] = r[0]
+            det.update({(14, 17): r[0], (13, 18): r[0], (14, 18): r[0], (17, 17): r[1], (17, 18): r[1], (18, 18): r[2]})
+            det.update({(15, 19): MATERIALS["laiton"]})
+            for x in (12, 13, 14, 18, 19, 20):  # poches à rabat
+                det[(x, 25)] = r[2]
+                det[(x, 23)] = r[2] if x in (12, 20) else r[1]
+            det.update({(12, 21): r[2], (20, 21): r[2]})  # coutures d'épaule
+        elif view == "back":
+            for x in range(12, 20):
+                det[(x, 21)] = r[2]
+            det.update({(16, y): r[2] for y in range(22, ty1)})
+            det.update({(x, 17): r[0] for x in range(14, 18)})
+        else:
+            det.update({(18, 17): r[0], (19, 18): r[0]})
+            for y in range(19, ty1):
+                det[(20 if (20, y) in trunk else 19, y)] = r[2]
+            det.update({(18, 25): r[2], (19, 25): r[2]})
+    else:
+        orange = ramp(MATERIALS["orange"])
+        for s in sleeves:
+            for (x, y) in s.shape:
+                if y in (22, 23):
+                    xs = _row(s.shape, y)
+                    det[(x, y)] = orange[2] if x == xs[-1] else orange[1] if y == 23 else orange[0]
+        if view == "front":
+            for y in range(19, ty1):
+                det[(16, y)] = r[2]
+            det.update({(13, 21): r[2], (14, 21): r[2], (13, 22): r[2], (14, 22): r[2], (13, 23): r[2], (14, 23): r[2]})  # poche poitrine
+            det.update({(13, 21): r[0], (14, 21): r[0]})
+            det.update({(x, 27): r[2] for x in range(11, 21)})  # ceinture élastique
+        elif view == "back":
+            det.update({(16, y): r[2] for y in range(19, ty1)})
+            det.update({(x, 27): r[2] for x in range(11, 21)})
+            det.update({(x, 20): orange[1] for x in range(13, 19)})
+        else:
+            det.update({(x, 27): r[2] for x in range(13, 20)})
+    return render(pieces, body, det)
 
 
-def _stamp(text: str, direction: str) -> dict[tuple[int, int], str]:
-    """Grille d'un accessoire (cheveux, couvre-chef, sac) ; « left » = miroir de « right »."""
-    rows = _rows(text)
-    if direction == "left":
-        rows = [r[::-1] for r in rows]
-    return {(x, y): ch for y, r in enumerate(rows) for x, ch in enumerate(r) if ch != "."}
+# --------------------------------------------------------------------------- tête : cheveux, coiffes
+def _head_cx(view: str) -> float:
+    return 16.3 if view == "side" else 16.0
 
 
-def _stamped(grids: dict[str, str], direction: str, palette: dict[str, tuple[int, int, int]], reg, outline) -> Pixels:
-    key = "side" if direction in ("left", "right") else direction
-    cells = _stamp(grids[key], direction)
-    main = {p: palette[ch] for p, ch in cells.items() if ch.isupper()}
-    px = _shade(main)
-    for p, ch in cells.items():
-        if ch.islower():  # détails sans ombrage (visière, sangles, verre...)
-            px[p] = (*palette[ch], 255)
-    return _outline(px, set(reg), outline)
+def draw_hair(sex: str, view: str, style: str, color: RGB) -> Image.Image:
+    body = silhouette(body_parts(sex, view))
+    cx = _head_cx(view)
+    dome = ellipse(cx, 10.3, 5.9, 6.4)
+    r = ramp(color)
+    pieces: list[Piece] = []
+    det: dict[Pt, RGB] = {}
+    if view == "front":
+        cap = {q for q in dome if q[1] <= 8 or (q[1] <= 11 and (q[0] <= 10 or q[0] >= 21))} | {(11, 9), (12, 9), (13, 9), (19, 9), (20, 9), (11, 10), (20, 10)}
+        if style == "long":
+            pieces.append(Piece(rect(9, 9, 11, 25) | rect(20, 9, 22, 25) | rect(10, 26, 11, 26) | rect(20, 26, 21, 26), color))
+            cap |= {(14, 9)}
+        pieces.append(Piece(cap, color))
+        det.update({(x, 6): r[0] for x in (12, 13, 14, 15)})
+        det.update({(16, 5): r[2], (16, 6): r[2], (17, 7): r[2]} if style != "court" else {(13, 7): r[0]})
+    elif view == "side":
+        cap = {q for q in dome if q[1] <= 8 or (q[0] <= 14 and q[1] <= 13)} | {(18, 9), (19, 9)}
+        if style == "long":
+            pieces.append(Piece(rect(10, 9, 14, 25) | rect(11, 26, 13, 26), color))
+        if style == "queue":
+            pieces.append(Piece(capsule(10.5, 9.5, 8.5, 18.5, 1.5), color))
+            det.update({(10, 10): MATERIALS["casquette"], (11, 10): MATERIALS["casquette"]})
+        pieces.append(Piece(cap, color))
+        det.update({(x, 6): r[0] for x in (13, 14, 15, 16)})
+        det.update({(15, 10): r[2], (15, 12): r[2]})
+    else:
+        cap = {q for q in dome if q[1] <= 14}
+        if style == "long":
+            cap |= rect(10, 9, 21, 25) | rect(11, 26, 20, 26)
+            det.update({(x, y): r[2] for x in (13, 17) for y in range(12, 26)})  # mèches
+            det.update({(x, y): r[0] for x in (11, 15) for y in range(10, 22)})
+        pieces.append(Piece(cap, color))
+        if style == "queue":
+            pieces.append(Piece(capsule(16, 11, 16, 21, 1.6), color))
+            det.update({(15, 11): MATERIALS["casquette"], (16, 11): MATERIALS["casquette"]})
+        det.update({(x, 6): r[0] for x in (12, 13, 14, 15)})
+        det.update({(13, 10): r[2], (17, 11): r[2], (15, 13): r[2]} if style != "long" else {})
+    return render(pieces, body, det)
 
 
-_E = ".............."
-
-HAIR = {
-    "court": {
-        "down": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "...HHHHHHHH...", "...HH....HH...", "...H......H..."] + [_E] * 22),
-        "side": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "...HHHHHHHH...", "...HHHHHH.....", "...HHHH.......", "...HHH........"] + [_E] * 21),
-        "up": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "...HHHHHHHH...", "...HHHHHHHH...", "...HHHHHHHH...", "...HHHHHHHH...", "....HHHHHH...."] + [_E] * 20),
-    },
-    "long": {
-        "down": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "..HHHHHHHHHH..", "..HHH....HHH..", "..HH......HH..", "..HH......HH..", "..HH......HH..", "..HH......HH..", "..HH......HH..", "..HH......HH..", "..H........H.."] + [_E] * 16),
-        "side": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "..HHHHHHHHH...", "..HHHHHHH.....", "..HHHHH.......", "..HHHH........", "..HHHH........", "..HHHH........", "..HHHH........", "..HHH.........", "..HH.........."] + [_E] * 16),
-        "up": "\n".join(["....HHHHHH....", "...HHHHHHHH...", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "..HHHHHHHHHH..", "...HHHHHHHH..."] + [_E] * 16),
-    },
-}
-
-HELMET = {
-    "down": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..xxxxxxxxxx.."] + [_E] * 23),
-    "side": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..xxxxxxxxxxx.", "..XXX........."] + [_E] * 22),
-    "up": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..xxxxxxxxxx.."] + [_E] * 22),
-}
-
-CAP = {
-    "down": "\n".join(["....XXXXXX....", "...XXXXXXXX...", "...XXXXXXXX...", "..xxxxxxxxxx.."] + [_E] * 23),
-    "side": "\n".join(["....XXXXXX....", "...XXXXXXXX...", "...XXXXXXXX...", "...XXXXXxxxxx."] + [_E] * 23),
-    "up": "\n".join(["....XXXXXX....", "...XXXXXXXX...", "...XXXXXXXX...", "...XXXXXXXX...", "....xxxxxx...."] + [_E] * 22),
-}
-
-# Capuche de la combinaison : G verre du masque, f cartouche filtrante.
-HOOD = {
-    "down": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXggggggXX..", "..XXggggggXX..", "..XXggggggXX..", "..XXXXffXXXX..", "...XXXffXXX...", "....XXXXXX...."] + [_E] * 18),
-    "side": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXgggg..", "..XXXXXXgggg..", "..XXXXXXgggg..", "..XXXXXXXXfff.", "...XXXXXXXfff.", "....XXXXXX...."] + [_E] * 18),
-    "up": "\n".join(["...XXXXXXXX...", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "..XXXXXXXXXX..", "...XXXXXXXX...", "....XXXXXX...."] + [_E] * 18),
-}
-
-# Sac à dos : B corps du sac, s sangles / rabat.
-PACK = {
-    "down": "\n".join([_E] * 9 + ["....s....s....", "....s....s....", "....s....s....", "....s....s....", "....s....s...."] + [_E] * 13),
-    "side": "\n".join([_E] * 9 + [".BBBs.........", ".BBBBs........", ".ssss.s.......", ".BBBB.s.......", ".BBBBs........", ".BBBs.........", ".BBB.........."] + [_E] * 11),
-    "up": "\n".join([_E] * 8 + ["....ssssss....", "...BBBBBBBB...", "...BBBBBBBB...", "...ssssssss...", "...BBBBBBBB...", "...BBsssBBB...", "...BBBBBBBB...", "...BBBBBBBB..."] + [_E] * 11),
-}
+def draw_helmet(sex: str, view: str) -> Image.Image:
+    body = silhouette(body_parts(sex, view))
+    c = MATERIALS["casque"]
+    r = ramp(c)
+    cx = _head_cx(view)
+    shell = {q for q in ellipse(cx, 10.2, 6.7, 6.9) if q[1] <= (11 if view == "back" else 9)}
+    det: dict[Pt, RGB] = {}
+    rim = _rows(shell)[1]
+    for x in _row(shell, rim):
+        det[(x, rim)] = r[3]
+    det.update({(12, 5): r[0], (13, 4): r[0], (14, 4): r[0], (12, 6): r[0]})  # reflet
+    strap = darker(MATERIALS["cuir"], 0.8)
+    if view == "front":
+        det.update({(x, y): strap for x in (11, 20) for y in range(10, 15)})
+        det.update({(12, 15): strap, (19, 15): strap, (15, 7): r[2], (16, 7): r[2], (15, 6): r[2], (16, 6): r[2]})
+    elif view == "side":
+        shell |= {(22, 9), (23, 9)}
+        det.update({(22, 9): r[3], (23, 9): r[3], (16, 10): strap, (17, 11): strap, (17, 12): strap, (18, 13): strap, (18, 14): strap, (19, 15): strap})
+    else:
+        det.update({(x, 8): r[2] for x in range(11, 21)})
+    return render([Piece(shell, c)], body, det)
 
 
-def layer_hair(reg, direction, style: str, color) -> Pixels:
-    return _stamped(HAIR[style], direction, {"H": color}, reg, _mul(color, 0.5))
+def draw_cap(sex: str, view: str) -> Image.Image:
+    body = silhouette(body_parts(sex, view))
+    c = MATERIALS["casquette"]
+    r = ramp(c)
+    cx = _head_cx(view)
+    crown = {q for q in ellipse(cx, 10.2, 6.0, 6.5) if q[1] <= (9 if view == "back" else 8)}
+    pieces = [Piece(crown, c)]
+    det: dict[Pt, RGB] = {}
+    if view == "front":
+        pieces.append(Piece(rect(9, 9, 22, 9) | rect(10, 10, 21, 10), darker(c, 0.82)))
+        det.update({(15, 6): (236, 228, 208), (16, 6): (236, 228, 208), (15, 7): (236, 228, 208), (16, 7): (200, 190, 170)})
+        det.update({(16, y): r[2] for y in (4, 5)})
+    elif view == "side":
+        pieces.append(Piece(rect(19, 9, 25, 9) | rect(19, 8, 23, 8), darker(c, 0.82)))
+        det.update({(19, 6): (236, 228, 208), (19, 7): (200, 190, 170), (14, 5): r[2], (14, 6): r[2], (14, 7): r[2]})
+    else:
+        det.update({(15, 8): darker(r[3], 0.6), (16, 8): darker(r[3], 0.6), (15, 9): (40, 34, 40), (16, 9): (40, 34, 40)})
+        det.update({(16, y): r[2] for y in (4, 5, 6)})
+    det.update({(12, 5): r[0], (13, 5): r[0]})
+    return render(pieces, body, det)
 
 
-def layer_helmet(reg, direction) -> Pixels:
-    c = CLOTHES["casque"]
-    return _stamped(HELMET, direction, {"X": c, "x": _mul(c, 0.62)[:3]}, reg, _mul(c, 0.4))
+def draw_hood(sex: str, view: str) -> Image.Image:
+    """Capuche de la combinaison : cagoule intégrale, visière et cartouche filtrante."""
+    body = silhouette(body_parts(sex, view))
+    c = MATERIALS["combi"]
+    r, g, k = ramp(c), ramp(MATERIALS["verre"]), ramp(MATERIALS["caoutchouc"])
+    cx = _head_cx(view)
+    shell = ellipse(cx, 10.6, 6.7, 7.3) | rect(12, 16, 19, 18) | rect(11, 18, 20, 18)
+    pieces = [Piece(shell, c)]
+    det: dict[Pt, RGB] = {}
+    if view == "front":
+        glass = rect(12, 9, 19, 13) - {(12, 9), (19, 9), (12, 13), (19, 13)}
+        for (x, y) in glass:
+            det[(x, y)] = g[2] if (x >= 18 or y == 13) else g[1]
+        det.update({(13, 10): g[0], (14, 10): g[0], (13, 11): g[0], (15, 9): g[0], (17, 12): (236, 250, 248)})
+        frame = (widen(glass) | {(x, y + d) for (x, y) in glass for d in (-1, 1)}) - glass
+        det.update({q: k[1] for q in frame})
+        det.update({(15, 15): k[1], (16, 15): k[2], (15, 16): k[2], (16, 16): k[3], (14, 15): k[0], (17, 15): k[3], (15, 14): k[1], (16, 14): k[1]})
+        det.update({(11, 16): r[2], (20, 16): r[2]})
+    elif view == "side":
+        glass = rect(18, 9, 21, 13) - {(21, 9), (21, 13)}
+        for (x, y) in glass:
+            det[(x, y)] = g[2] if y == 13 else g[1]
+        det.update({(18, 10): g[0], (19, 10): g[0], (18, 11): g[0]})
+        det.update({(17, y): k[1] for y in range(9, 14)})
+        det.update({(x, 8): k[1] for x in range(18, 22)})
+        det.update({(x, 14): k[1] for x in range(18, 22)})
+        can = rect(20, 15, 23, 17)
+        pieces.append(Piece(can, MATERIALS["caoutchouc"]))
+        det.update({(13, 12): r[2], (13, 13): r[2], (14, 15): r[2], (15, 16): r[2]})
+    else:
+        det.update({(16, y): r[2] for y in range(5, 17)})
+        det.update({(x, 15): r[2] for x in range(11, 21)})
+    det.update({(12, 5): r[0], (13, 4): r[0]})
+    return render(pieces, body, det)
 
 
-def layer_cap(reg, direction) -> Pixels:
-    c = CLOTHES["casquette"]
-    return _stamped(CAP, direction, {"X": c, "x": _mul(c, 0.66)[:3]}, reg, _mul(c, 0.4))
+def draw_pack(sex: str, view: str) -> Image.Image:
+    body = silhouette(body_parts(sex, view))
+    c = MATERIALS["sac"]
+    r = ramp(c)
+    brass = MATERIALS["laiton"]
+    det: dict[Pt, RGB] = {}
+    if view == "front":  # de face, on ne voit que les bretelles
+        straps = rect(12, 18, 13, 26) | rect(18, 18, 19, 26)
+        for (x, y) in straps:
+            det[(x, y)] = r[2] if x in (13, 19) else r[1]
+        det.update({(12, 23): brass, (18, 23): brass})
+        return render([], body, det)
+    if view == "side":
+        bag = (rect(8, 18, 13, 30) - {(8, 18), (8, 30)}) | rect(7, 24, 7, 29)
+        det.update({(x, 22): r[3] for x in range(8, 14)})
+        det.update({(x, 21): r[0] for x in range(9, 13)})
+        det.update({(10, 23): brass, (9, 26): r[2], (10, 26): r[2], (11, 26): r[2], (12, 26): r[2], (9, 29): r[2], (12, 27): r[2], (12, 28): r[2]})
+        strap = {(14, 18): r[1], (15, 18): r[1], (16, 18): r[2], (17, 19): r[1], (18, 20): r[1], (19, 21): r[2], (19, 22): r[1], (19, 23): r[1], (19, 24): r[2], (18, 25): r[2]}
+        det.update(strap)
+        return render([Piece(bag, c)], body, det)
+    bag = rect(10, 18, 21, 31) - {(10, 18), (21, 18), (10, 31), (21, 31)}
+    det.update({(x, 23): r[3] for x in range(10, 22)})
+    det.update({(x, 22): r[2] for x in range(11, 21)})
+    det.update({(15, 24): brass, (16, 24): brass, (15, 25): darker(brass, 0.7), (16, 25): darker(brass, 0.7)})
+    for x in range(12, 20):  # poche basse
+        det[(x, 26)] = r[2]
+        det[(x, 30)] = r[2]
+    for y in range(26, 31):
+        det[(12, y)] = r[2]
+        det[(19, y)] = r[3]
+    det.update({(13, 27): r[0], (14, 27): r[0], (15, 17): r[2], (16, 17): r[2], (11, 20): r[0], (12, 19): r[0]})
+    return render([Piece(bag, c), Piece(rect(15, 16, 16, 17), darker(c, 0.8))], body, det)
 
 
-def layer_hood(reg, direction) -> Pixels:
-    c = CLOTHES["combi"]
-    pal = {"X": c, "g": CLOTHES["combi_verre"], "f": CLOTHES["combi_filtre"]}
-    return _stamped(HOOD, direction, pal, reg, _mul(c, 0.4))
-
-
-def layer_pack(reg, direction) -> Pixels:
-    c = CLOTHES["sac"]
-    return _stamped(PACK, direction, {"B": c, "s": _mul(c, 0.6)[:3]}, reg, _mul(c, 0.4))
-
-
-# Pièces équipables : nom → (emplacement, fonction(reg, direction) → pixels)
+# --------------------------------------------------------------------------- catalogue
 PIECES = {
-    "pantalon_jean": ("pantalon", lambda r, d: layer_pants(r, d, CLOTHES["pantalon"], CLOTHES["chaussures"])),
-    "veste_kaki": ("veste", lambda r, d: layer_jacket(r, d, CLOTHES["veste"])),
-    "casque_militaire": ("tete", layer_helmet),
-    "casquette_rouge": ("tete", layer_cap),
-    "sac_a_dos": ("dos", layer_pack),
-    "combi_capuche": ("tete", layer_hood),
-    "combi_haut": ("veste", lambda r, d: layer_jacket(r, d, CLOTHES["combi"], "band", CLOTHES["combi_bottes"])),
-    "combi_bas": ("pantalon", lambda r, d: layer_pants(r, d, CLOTHES["combi"], CLOTHES["combi_bottes"], 3)),
+    "pantalon_jean": ("pantalon", lambda s, v: draw_pants(s, v, MATERIALS["jean"], MATERIALS["cuir"])),
+    "veste_kaki": ("veste", lambda s, v: draw_jacket(s, v, MATERIALS["kaki"], "veste")),
+    "casque_militaire": ("tete", draw_helmet),
+    "casquette_rouge": ("tete", draw_cap),
+    "sac_a_dos": ("dos", draw_pack),
+    "combi_capuche": ("tete", draw_hood),
+    "combi_haut": ("veste", lambda s, v: draw_jacket(s, v, MATERIALS["combi"], "combi")),
+    "combi_bas": ("pantalon", lambda s, v: draw_pants(s, v, MATERIALS["combi"], MATERIALS["caoutchouc"], True, 5, MATERIALS["orange"])),
 }
+HAIR_STYLES = ("court", "long", "queue")
 SLOT_ORDER = ("pantalon", "veste", "cheveux", "tete", "dos")  # du dessous vers le dessus
+_VIEW = {"down": "front", "up": "back", "right": "side", "left": "side"}
 
 
-def sheet(build) -> Image.Image:
-    """Planche 4 directions d'un calque ; `build(direction)` renvoie les pixels."""
+def sheet(draw) -> Image.Image:
+    """Planche 4 directions ; `draw(view)` renvoie un cadre. « left » = miroir de « right »."""
     out = Image.new("RGBA", (FRAME_W * 4, FRAME_H), (0, 0, 0, 0))
+    cache: dict[str, Image.Image] = {}
     for i, d in enumerate(DIRECTIONS):
-        out.alpha_composite(_frame(build(d)), (i * FRAME_W, 0))
+        view = _VIEW[d]
+        if view not in cache:
+            cache[view] = draw(view)
+        frame = ImageOps.mirror(cache[view]) if d == "left" else cache[view]
+        out.alpha_composite(frame, (i * FRAME_W, 0))
     return out
 
 
 def body_sheet(sex: str, skin: str) -> Image.Image:
-    return sheet(lambda d: layer_body(_regions(body_grid(sex, d)), d, SKINS[skin]))
+    return sheet(lambda v: draw_body(sex, v, SKINS[skin]))
 
 
 def hair_sheet(sex: str, style: str, color: str) -> Image.Image:
-    return sheet(lambda d: layer_hair(_regions(body_grid(sex, d)), d, style, HAIR_COLORS[color]))
+    return sheet(lambda v: draw_hair(sex, v, style, HAIR_COLORS[color]))
 
 
 def piece_sheet(sex: str, name: str) -> Image.Image:
-    fn = PIECES[name][1]
-    return sheet(lambda d: fn(_regions(body_grid(sex, d)), d))
+    return sheet(lambda v: PIECES[name][1](sex, v))
 
 
 def assemble(sex: str, skin: str, hair: tuple[str, str] | None, pieces: list[str]) -> Image.Image:
@@ -464,14 +622,16 @@ def main() -> None:
 
     out = Path(__file__).resolve().parents[2] / "assets" / "sprites" / "character"
     out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("*.png"):
+        old.unlink()
     for sex in "mf":
         for skin in SKINS:
             body_sheet(sex, skin).save(out / f"corps_{sex}_{skin}.png")
-        for style in HAIR:
-            for color in HAIR_COLORS:
-                hair_sheet(sex, style, color).save(out / f"cheveux_{style}_{color}.png")  # identique m/f
         for name in PIECES:
             piece_sheet(sex, name).save(out / f"{name}_{sex}.png")
+    for style in HAIR_STYLES:
+        for color in HAIR_COLORS:
+            hair_sheet("m", style, color).save(out / f"cheveux_{style}_{color}.png")
 
 
 if __name__ == "__main__":
