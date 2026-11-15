@@ -12,40 +12,48 @@ from pathlib import Path
 
 from PIL import Image
 
-GRID = """
-......oooooooo......
-....oohhHHHHhhoo....
-...ohhHHHHHHHhhho...
-..ohhHHHhhhhHHhhdo..
-..ohHHhhhhhhhhhhdo..
-..ohhhhssSSsshhhdo..
-..ohhsSSSSSSSsshdo..
-..odhsSeSSSSeSthdo..
-..odhsSeSSSSeSthdo..
-..odhsSSSSSSSSthdo..
-...odsSSSttSSStdo...
-....oottSSSSttoo....
-..oooJJrrttrrJJooo..
-.oJJJjrRRRRRRrjjjko.
-.oJJkjmJJjkjjmjkjko.
-.oJjkjmJjjkjjmjkjko.
-.oJjkjmjjjkjjmjkjko.
-.oJjkjnjjjkjjnjkjko.
-.oJjkjjjjjkjjjjkjko.
-.ojjknnnnnMnnnnkjko.
-.osSopPPppqppppoSto.
-.ostopPPppqppppotto.
-..ooopPppqqppppooo..
-....opPppqqppppo....
-....opPppqqppppo....
-....opPpqoopppqo....
-....opPpqoopppqo....
-....obBbcoobbbco....
-....obBbcoobbbco....
-...obBbbcoobbbbco...
-...occcccooccccco...
-....ooooo..ooooo....
-"""
+# Canvas 24 × 64 : personnage de 60 px de haut, tête ≈ 1/6 du corps, pieds posés en bas du dessin.
+_ROWS = [
+    ".........oooooo.........",
+    ".......oohHHHHhoo.......",
+    "......ohhHHHHHhhdo......",
+    "......ohHHhhhhhhdo......",
+    "......ohhssSSSshdo......",
+    "......ohsSSSSSSsdo......",
+    "......odsSeSSeSsto......",
+    "......odsSSSSSSsto......",
+    ".......osSSttSSto.......",
+    ".......ottSSSStto.......",
+    "........oottttoo........",
+    ".......orRRttRRro.......",
+    ".....ooorRRRRRRrooo.....",
+    "....oJJJJjrrrrjjjjko....",
+    *["....oJjkjmJJkjmjkjko...."] * 2,
+    *["....oJjkjmJjkjmjkjko...."] * 2,
+    *["....oJjkjmjjkjmjkjko...."] * 3,
+    "....oJjkjnjjkjnjkjko....",
+    "....ojkkjjjjkjjjkkko....",
+    *["....oJjkjjjjkjjjkjko...."] * 2,
+    "....oJjkjkkjkkkjkjko....",
+    *["....oJjkjjjjkjjjkjko...."] * 2,
+    "....ojjkjjjjkjjjkjko....",
+    "....okkkkkkkkkkkkkko....",
+    "....oSsonnnMMnnnosto....",
+    "....oSsopPPpqppposto....",
+    "....ostopPPpqpppotto....",
+    ".....ooopPPpqpppooo.....",
+    *[".......opPPpqpppo......."] * 2,
+    ".......opPpqqpppo.......",
+    *[".......opPpqpppqo......."] * 6,
+    ".......oPppqppqqo.......",
+    *[".......opPpqpppqo......."] * 7,
+    *[".......obBbcbbbco......."] * 5,
+    *["......obBbbcbbbbco......"] * 2,
+    "......occcccccccco......",
+    ".......oooooooooo.......",
+]
+WIDTH, HEIGHT = 24, 64
+GRID = "\n".join(["." * WIDTH] * (HEIGHT - len(_ROWS)) + _ROWS)
 
 PALETTE = {
     "o": (31, 26, 36),
@@ -80,13 +88,13 @@ VARIANTS = {
 
 def rows() -> list[str]:
     lines = GRID.strip("\n").split("\n")
-    assert all(len(r) == 20 for r in lines), [(i, len(r)) for i, r in enumerate(lines) if len(r) != 20]
+    assert all(len(r) == WIDTH for r in lines), [(i, len(r)) for i, r in enumerate(lines) if len(r) != WIDTH]
     return lines
 
 
 def draw(palette: dict[str, tuple[int, int, int]]) -> Image.Image:
     lines = rows()
-    img = Image.new("RGBA", (20, len(lines)), (0, 0, 0, 0))
+    img = Image.new("RGBA", (WIDTH, len(lines)), (0, 0, 0, 0))
     for y, line in enumerate(lines):
         for x, ch in enumerate(line):
             if ch != ".":
