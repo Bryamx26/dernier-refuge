@@ -1,6 +1,7 @@
 // Simulation déterministe client ↔ serveur pour les tests réseau : horloge virtuelle, latence et
 // gigue sur un lien ordonné (comme TCP), serveur autoritaire minimal qui applique `step()`.
 import type {
+  ClientPayloads,
   EntityState,
   InputPayload,
   ServerMessage,
@@ -76,7 +77,10 @@ export class ZoneSimulation implements ZoneLinkSocket {
     return () => set.delete(h);
   }
 
-  sendWithSeq(_t: 'input', d: InputPayload): number | null {
+  sendWithSeq<K extends 'input' | 'action'>(t: K, payload: ClientPayloads[K]): number | null {
+    // Seules les entrées de déplacement sont simulées ici.
+    if (t !== 'input') return null;
+    const d = payload as InputPayload;
     this.seq += 1;
     const seq = this.seq;
     this.lastToServer = this.schedule(this.lastToServer, () => this.inbox.push({ seq, input: d }));
@@ -144,11 +148,20 @@ export class ZoneSimulation implements ZoneLinkSocket {
           y: this.serverPos.y,
           aim: 0,
           anim: 'walk',
+          health: 1,
         },
       ];
       const other = this.opts.otherPlayer?.(tick * (1000 / this.tickRate));
       if (other)
-        entities.push({ id: 'other', kind: 'player', name: 'Autre', ...other, aim: 0, anim: 'walk' });
+        entities.push({
+          id: 'other',
+          kind: 'player',
+          name: 'Autre',
+          ...other,
+          aim: 0,
+          anim: 'walk',
+          health: 1,
+        });
       const ack = this.ackSeq;
       this.lastToClient = this.schedule(this.lastToClient, () =>
         this.emit({ t: 'snapshot', seq: tick + 1, tick, d: { ack_seq: ack, entities } }),

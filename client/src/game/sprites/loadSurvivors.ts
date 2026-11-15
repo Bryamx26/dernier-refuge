@@ -7,6 +7,7 @@ import {
   PLACEHOLDER_SPRITE,
   spriteUrls,
   SURVIVOR_VARIANTS,
+  ZOMBIE_SPRITES,
   type Facing,
   type SurvivorSheet,
 } from './survivors';
@@ -18,8 +19,10 @@ export const VARIANTS_REGISTRY_KEY = 'survivorVariants';
 const sheetKey = (variant: string) => `${variant}:sheet`;
 
 /** À appeler dans `preload()` : met en file les descriptions JSON. */
+const ALL_SHEETS = [...SURVIVOR_VARIANTS, ...ZOMBIE_SPRITES];
+
 export function queueSurvivorSheets(scene: Phaser.Scene): void {
-  for (const variant of SURVIVOR_VARIANTS) scene.load.json(sheetKey(variant), spriteUrls(variant).json);
+  for (const variant of ALL_SHEETS) scene.load.json(sheetKey(variant), spriteUrls(variant).json);
 }
 
 /**
@@ -28,7 +31,7 @@ export function queueSurvivorSheets(scene: Phaser.Scene): void {
  */
 export function loadSurvivorTextures(scene: Phaser.Scene): Promise<string[]> {
   const sheets = new Map<string, SurvivorSheet>();
-  for (const variant of SURVIVOR_VARIANTS) {
+  for (const variant of ALL_SHEETS) {
     const data: unknown = scene.cache.json.get(sheetKey(variant));
     if (isSurvivorSheet(data)) {
       sheets.set(variant, data);
@@ -44,7 +47,7 @@ export function loadSurvivorTextures(scene: Phaser.Scene): Promise<string[]> {
       for (const [variant, sheet] of sheets) {
         if (!scene.textures.exists(variant)) continue;
         createAnimations(scene, variant, sheet);
-        available.push(variant);
+        if ((SURVIVOR_VARIANTS as readonly string[]).includes(variant)) available.push(variant);
       }
       createPlaceholder(scene);
       if (available.length < SURVIVOR_VARIANTS.length) {

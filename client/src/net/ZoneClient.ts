@@ -1,7 +1,16 @@
 // Client de zone « jeu » : au-dessus du ZoneSocket, envoie un `input` par pas fixe, prédit le joueur
 // local, réconcilie sur `ack_seq` et interpole les autres joueurs. Logique pure, pilotée par
 // `update(now, intent)` à chaque image (Phaser) ou par un test avec une horloge simulée.
-import type { InputPayload, ServerMessage, ServerMessageType, WelcomePayload } from '../generated/protocol';
+import type {
+  ActionKind,
+  AnimState,
+  ClientPayloads,
+  FxEvent,
+  InputPayload,
+  ServerMessage,
+  ServerMessageType,
+  WelcomePayload,
+} from '../generated/protocol';
 import type { CollisionGrid } from '../game/movement/CollisionGrid';
 import { MOVEMENT } from '../game/movement/config';
 import type { MovementConfig, Vec2 } from '../game/movement/step';
@@ -14,21 +23,24 @@ export interface ZoneLinkSocket {
     type: K,
     handler: (message: Extract<ServerMessage, { t: K }>) => void,
   ): () => void;
-  sendWithSeq(t: 'input', d: InputPayload): number | null;
+  sendWithSeq<K extends 'input' | 'action'>(t: K, d: ClientPayloads[K]): number | null;
   getStatus(): { readonly welcome: WelcomePayload | null };
 }
 
 /** Intention du joueur à l'instant présent (clavier + souris). */
 export type InputIntent = InputPayload;
 
-export const IDLE_INTENT: InputIntent = { move_x: 0, move_y: 0, aim: 0, sprint: false };
+export const IDLE_INTENT: InputIntent = { move_x: 0, move_y: 0, aim: 0, sprint: false, attack: false };
+
+/** Effets visuels reçus et pas encore affichés : au-delà, les plus anciens sont jetés. */
+const MAX_PENDING_FX = 256;
 
 export interface LocalPlayerView {
   readonly id: string;
   readonly x: number;
   readonly y: number;
   readonly aim: number;
-  readonly anim: 'idle' | 'walk' | 'run';
+  readonly anim: AnimState;
 }
 
 export interface ZoneClientStats {
@@ -78,6 +90,8 @@ export class ZoneClient {
   private corrections: { t: number; d: number }[] = [];
   private lastCorrection = 0;
   private readonly unsubscribe: (() => void)[] = [];
+  private dead = false;
+  private fx: FxEvent[] = [];
   private readonly now: () => number;
 
   constructor(
@@ -89,6 +103,13 @@ export class ZoneClient {
     this.unsubscribe.push(
       socket.on('welcome', (m) => this.handleWelcome(m.d)),
       socket.on('snapshot', (m) => this.handleSnapshot(m.tick, m.d.ack_seq, m.d.entities)),
+      socket.on('vitals', (m) => {
+        this.dead = m.d.dead;
+      }),
+      socket.on('fx', (m) => {
+        this.fx.push(...m.d.events);
+        if (this.fx.length > MAX_PENDING_FX) this.fx.splice(0, this.fx.length - MAX_PENDING_FX);
+      }),
     );
     if (this.welcomePayload) this.handleWelcome(this.welcomePayload);
   }
@@ -117,7 +138,9 @@ export class ZoneClient {
    * Avance l'horloge locale : envoie un `input` par pas fixe écoulé (avec l'intention courante)
    * et le simule aussitôt. À appeler à chaque image.
    */
-  update(now: number, intent: InputIntent): void {
+  update(now: number, requested: InputIntent): void {
+    // Un mort ne bouge ni ne frappe : la prédiction reste alignée sur le serveur.
+    const intent = this.dead ? { ...IDLE_INTENT, aim: requested.aim } : requested;
     this.intent = intent;
     const elapsed = this.lastUpdate === null ? 0 : Math.max(0, now - this.lastUpdate);
     this.lastUpdate = now;
@@ -154,8 +177,25 @@ export class ZoneClient {
       x: prev.x + (pos.x - prev.x) * alpha + this.visualOffset.x,
       y: prev.y + (pos.y - prev.y) * alpha + this.visualOffset.y,
       aim: this.intent.aim,
-      anim: moving ? (this.intent.sprint ? 'run' : 'walk') : 'idle',
+      anim: this.dead ? 'dead' : moving ? (this.intent.sprint ? 'run' : 'walk') : 'idle',
     };
+  }
+
+  /** Vrai tant que le personnage est mort (en attente de réapparition). */
+  get isDead(): boolean {
+    return this.dead;
+  }
+
+  /** Action ponctuelle : ramasser/fouiller, utiliser, jeter, recharger, réapparaître. */
+  sendAction(kind: ActionKind, slot = -1): boolean {
+    return this.socket.sendWithSeq('action', { kind, slot }) !== null;
+  }
+
+  /** Effets visuels reçus depuis le dernier appel (vidés). */
+  takeFx(): FxEvent[] {
+    const events = this.fx;
+    this.fx = [];
+    return events;
   }
 
   /** Autres joueurs, interpolés avec retard. */
@@ -205,7 +245,7 @@ export class ZoneClient {
   ): void {
     const now = this.now();
     const selfId = this.welcomePayload?.entity_id;
-    this.visible = entities.length;
+    this.visible = entities.filter((e) => e.kind === 'player').length;
     this.interpolation?.push(tick, entities, now, selfId);
     const self = entities.find((e) => e.id === selfId);
     if (!self) return;

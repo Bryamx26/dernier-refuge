@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { ZoneClient } from '../net/ZoneClient';
 import { ZoneSocket, type ZoneSocketOptions, type ZoneSocketStatus } from '../net/ZoneSocket';
+import { useGameStore } from './gameStore';
 
 export interface ZoneSession {
   readonly zoneId: string;
@@ -32,7 +33,7 @@ export function setZoneSocketFactory(factory: (options: ZoneSocketOptions) => Zo
   socketFactory = factory;
 }
 
-let unsubscribeStatus: (() => void) | null = null;
+let unsubscribe: (() => void)[] = [];
 
 export const useZoneStore = create<ZoneState>()((set, get) => ({
   session: null,
@@ -46,13 +47,21 @@ export const useZoneStore = create<ZoneState>()((set, get) => ({
     // Créé avant connect() pour ne manquer ni le welcome ni le premier snapshot.
     const client = new ZoneClient(socket);
     set({ session, socket, client, status: socket.getStatus() });
-    unsubscribeStatus = socket.onStatus((status) => set({ status }));
+    const game = useGameStore.getState();
+    game.reset();
+    unsubscribe = [
+      socket.onStatus((status) => set({ status })),
+      socket.on('vitals', (m) => game.setVitals(m.d)),
+      socket.on('inventory', (m) => game.setInventory(m.d)),
+      socket.on('notice', (m) => game.pushNotice(m.d.text)),
+    ];
     socket.connect();
   },
 
   leave: () => {
-    unsubscribeStatus?.();
-    unsubscribeStatus = null;
+    unsubscribe.forEach((off) => off());
+    unsubscribe = [];
+    useGameStore.getState().reset();
     get().client?.dispose();
     get().socket?.close();
     set({ session: null, socket: null, client: null, status: null });

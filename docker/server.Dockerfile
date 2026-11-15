@@ -8,9 +8,10 @@ WORKDIR /srv/server
 COPY server/pyproject.toml server/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Données de jeu lues par le serveur : protocole, déplacement, cartes.
+# Données de jeu lues par le serveur : protocole, déplacement, cartes, contenu (phase 3).
 COPY shared/ /srv/shared/
 COPY maps/ /srv/maps/
+COPY content/ /srv/content/
 COPY server/ ./
 ENV DR_GAME_DATA_DIR=/srv
 ENV PATH="/opt/venv/bin:$PATH"

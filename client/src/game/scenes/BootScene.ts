@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 import { fonts, hexToNumber, palette } from '../../ui/theme/palette';
 import { SceneKeys } from '../sceneKeys';
 import { loadSurvivorTextures, queueSurvivorSheets } from '../sprites/loadSurvivors';
-import { GAME_DATA_URL } from '../sprites/survivors';
+import { GAME_DATA_URL, LOOT_TEXTURE } from '../sprites/survivors';
 
 const FONT_LOAD_TIMEOUT_MS = 2000;
 export const TILESET_TEXTURE = 'tileset:valcendre';
@@ -32,6 +32,7 @@ export class BootScene extends Phaser.Scene {
     });
     queueSurvivorSheets(this);
     this.load.image(TILESET_TEXTURE, `${GAME_DATA_URL}/assets/tilesets/${TILESET_NAME}.png`);
+    this.load.image(LOOT_TEXTURE, `${GAME_DATA_URL}/assets/sprites/loot.png`);
   }
 
   create(): void {

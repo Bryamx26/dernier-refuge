@@ -1,0 +1,41 @@
+# Types de zombies. IA exécutée par le serveur (server/app/zone/zombies.py).
+#
+#   health               points de vie
+#   half_size            demi-côté de la boîte de collision (tuiles)
+#   wander_speed         vitesse d'errance (tuiles/s) ; le joueur marche à 3, sprinte à 5
+#   chase_speed          vitesse de poursuite
+#   sight_range          portée de vue (tuiles), bloquée par les murs
+#   sight_fov_deg        champ de vision
+#   sense_range          en deçà, le joueur est perçu dans toutes les directions (murs exceptés)
+#   hearing              multiplicateur du rayon des bruits entendus
+#   attack_range         distance d'attaque, de centre à centre (tuiles)
+#   attack_damage        PV retirés par coup
+#   attack_cooldown_s    délai entre deux coups
+#   bleed_chance         probabilité qu'un coup provoque un saignement
+#   wander_radius        rayon d'errance autour du point d'origine
+#   leash_radius         au-delà de cette distance de l'origine, le zombie abandonne et rentre
+#   search_s             durée de recherche à la dernière position connue de la cible
+
+types:
+  rodeur:
+    name: Rôdeur
+    health: 70
+    half_size: 0.3
+    wander_speed: 0.8
+    chase_speed: 3.3
+    sight_range: 9
+    sight_fov_deg: 130
+    sense_range: 1.8
+    hearing: 1.0
+    attack_range: 0.95
+    attack_damage: 8
+    attack_cooldown_s: 1.5
+    bleed_chance: 0.3
+    wander_radius: 5
+    leash_radius: 26
+    search_s: 6
+
+# Bruit des déplacements du joueur (rayon en tuiles, émis environ deux fois par seconde).
+player_noise:
+  walk: 2.5
+  sprint: 7

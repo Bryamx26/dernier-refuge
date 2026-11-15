@@ -17,5 +17,7 @@
 | --- | --- |
 | [conventions.md](conventions.md) | Règles de code, branches, tests, propriété des dossiers |
 | [phase-1-contracts.md](phase-1-contracts.md) | Contrats d'interface de la phase 1 |
+| [phase-2-contracts.md](phase-2-contracts.md) | Contrats de la phase 2 (carte, déplacement, synchronisation) |
+| [phase-3-contracts.md](phase-3-contracts.md) | Contrats de la phase 3 (zombies, combat, loot, inventaire, survie) |
 | [protocol.md](protocol.md) | Protocole WebSocket |
 | [adr/](adr/) | Décisions d'architecture |

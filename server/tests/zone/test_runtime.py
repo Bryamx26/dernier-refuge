@@ -16,7 +16,7 @@ from app.protocol.codec import ClientEnvelope
 from app.protocol.generated import InputPayload, PingPayload, SnapshotPayload
 from app.zone.manager import ZoneManager, ZoneSpec
 from app.zone.movement import CollisionGrid, MovementConfig
-from app.zone.persistence import CharacterRecord, SavedPosition
+from app.zone.persistence import CharacterRecord, SavedCharacter
 from app.zone.runtime import (
     INPUT_CATCHUP_MARGIN,
     AlreadyConnectedError,
@@ -35,12 +35,12 @@ class MemoryStore:
     """`PlayerStore` en mémoire."""
 
     def __init__(self) -> None:
-        self.saves: list[list[SavedPosition]] = []
+        self.saves: list[list[SavedCharacter]] = []
 
     async def load_character(self, character_id: str) -> CharacterRecord | None:
         return None
 
-    async def save_positions(self, positions: list[SavedPosition]) -> None:
+    async def save_characters(self, positions: list[SavedCharacter]) -> None:
         self.saves.append(list(positions))
 
 
@@ -80,13 +80,15 @@ def _session(character_id: str) -> ClientSession:
 
 def _input(seq: int, move_x: float = 0.0, move_y: float = 0.0, *, sprint: bool = False) -> ClientEnvelope:
     return ClientEnvelope(
-        t="input", seq=seq, payload=InputPayload(move_x=move_x, move_y=move_y, aim=0.5, sprint=sprint)
+        t="input",
+        seq=seq,
+        payload=InputPayload(move_x=move_x, move_y=move_y, aim=0.5, sprint=sprint, attack=False),
     )
 
 
 def _snapshots(session: ClientSession) -> list[dict[str, Any]]:
-    messages = [json.loads(text) for text in session.drain_outbox()]
-    assert all(m["t"] == "snapshot" for m in messages)
+    # Les messages de jeu (vitals, inventory, notice, fx) sont ignorés ici.
+    messages = [m for m in (json.loads(text) for text in session.drain_outbox()) if m["t"] == "snapshot"]
     for m in messages:
         SnapshotPayload.model_validate(m["d"])  # conforme au schéma
     return messages
@@ -226,6 +228,7 @@ def test_inputs_move_player_and_ack() -> None:
             "y": 10.0,
             "aim": 0.0,
             "anim": "idle",
+            "health": 1.0,
         }
     ]
 
@@ -376,13 +379,17 @@ async def test_autosave_and_stop_save_positions() -> None:
     zone.start()
     await asyncio.sleep(0.18)
     assert len(store.saves) >= 2
-    assert store.saves[0] == [SavedPosition(character_id="c1", x=10.0, y=10.0, facing=0.25)]
+    saved = store.saves[0]
+    assert len(saved) == 1
+    assert (saved[0].character_id, saved[0].x, saved[0].y, saved[0].facing) == ("c1", 10.0, 10.0, 0.25)
+    assert saved[0].inventory["slots"], "équipement de départ sauvegardé"
     count = len(store.saves)
     await zone.stop()
     # Sauvegarde finale à l'arrêt, puis fermeture 1001 après les snapshots déjà en file.
     assert len(store.saves) == count + 1
     assert socket.close_code == 1001
-    assert socket.sent and all(json.loads(text)["t"] == "snapshot" for text in socket.sent)
+    kinds = {json.loads(text)["t"] for text in socket.sent}
+    assert "snapshot" in kinds and kinds <= {"snapshot", "vitals", "inventory"}
     assert zone.online_count == 0
 
 
@@ -514,3 +521,21 @@ def test_honest_client_catches_up_after_network_freeze() -> None:
         zone._step()
     assert player.ack_seq == seq
     assert not session.pending_inputs
+
+
+async def test_attack_fx_and_game_messages_reach_the_client() -> None:
+    """Régression : les effets émis pendant les entrées (coup) sont envoyés, puis vidés."""
+    zone = _zone()
+    socket = FakeWebSocket()
+    session = ClientSession(cast(WebSocket, socket), character_id="c1", tick_source=lambda: zone.tick)
+    player = zone.register(session, position=(10.0, 10.0))
+    assert player.survivor.inventory.equipped >= 0, "arme de départ en main"
+    session.enqueue_input(
+        ClientEnvelope(
+            t="input", seq=1, payload=InputPayload(move_x=0, move_y=0, aim=0.0, sprint=False, attack=True)
+        )
+    )
+    zone._step()
+    kinds = [json.loads(text)["t"] for text in session.drain_outbox()]
+    assert {"snapshot", "inventory", "vitals", "fx"} <= set(kinds)
+    assert zone.game.fx == []

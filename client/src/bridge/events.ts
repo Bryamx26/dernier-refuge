@@ -22,7 +22,16 @@ export interface NetStatusView {
  */
 export type ZoneLink = Pick<
   ZoneClient,
-  'welcome' | 'ready' | 'setCollisionGrid' | 'update' | 'getLocalPlayer' | 'getRemotePlayers' | 'getStats'
+  | 'welcome'
+  | 'ready'
+  | 'setCollisionGrid'
+  | 'update'
+  | 'getLocalPlayer'
+  | 'getRemotePlayers'
+  | 'getStats'
+  | 'isDead'
+  | 'sendAction'
+  | 'takeFx'
 >;
 
 /** Mesures de jeu poussées par Phaser vers le HUD (quelques fois par seconde). */

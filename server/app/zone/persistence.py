@@ -1,4 +1,5 @@
-"""Accès base de données des serveurs de zone : chargement du personnage, sauvegarde des positions.
+"""Accès base de données des serveurs de zone : chargement du personnage, sauvegarde de son état
+(position, jauges de survie, inventaire).
 
 Toutes les opérations sont asynchrones et appelées hors de la boucle de tick (passerelle à la
 connexion/déconnexion, tâche de sauvegarde périodique de la zone).
@@ -8,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -28,16 +29,27 @@ class CharacterRecord:
     facing: float
     is_dead: bool
     account_banned: bool
+    health: float = 100.0
+    hunger: float = 100.0
+    thirst: float = 100.0
+    bleeding: bool = False
+    # Inventaire JSON ; None : le personnage n'est jamais entré dans le monde.
+    inventory: Any = None
 
 
 @dataclass(frozen=True, slots=True)
-class SavedPosition:
-    """Position persistée d'un personnage (tuiles, radians)."""
+class SavedCharacter:
+    """État persisté d'un personnage : position (tuiles, radians), jauges et inventaire."""
 
     character_id: str
     x: float
     y: float
     facing: float
+    health: float
+    hunger: float
+    thirst: float
+    bleeding: bool
+    inventory: dict[str, Any]
 
 
 class PlayerStore(Protocol):
@@ -45,7 +57,7 @@ class PlayerStore(Protocol):
 
     async def load_character(self, character_id: str) -> CharacterRecord | None: ...
 
-    async def save_positions(self, positions: list[SavedPosition]) -> None: ...
+    async def save_characters(self, characters: list[SavedCharacter]) -> None: ...
 
 
 def _parse_uuid(value: str) -> uuid.UUID | None:
@@ -85,13 +97,28 @@ class SqlPlayerStore:
             facing=character.facing,
             is_dead=character.is_dead,
             account_banned=bool(banned),
+            health=character.health,
+            hunger=character.hunger,
+            thirst=character.thirst,
+            bleeding=character.bleeding,
+            inventory=character.inventory,
         )
 
-    async def save_positions(self, positions: list[SavedPosition]) -> None:
-        """Met à jour `x`, `y`, `facing` de plusieurs personnages en une transaction."""
+    async def save_characters(self, characters: list[SavedCharacter]) -> None:
+        """Met à jour position, jauges et inventaire de plusieurs personnages en une transaction."""
         rows = [
-            {"id": key, "x": p.x, "y": p.y, "facing": p.facing}
-            for p in positions
+            {
+                "id": key,
+                "x": p.x,
+                "y": p.y,
+                "facing": p.facing,
+                "health": p.health,
+                "hunger": p.hunger,
+                "thirst": p.thirst,
+                "bleeding": p.bleeding,
+                "inventory": p.inventory,
+            }
+            for p in characters
             if (key := _parse_uuid(p.character_id)) is not None
         ]
         if not rows:

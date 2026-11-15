@@ -3,7 +3,8 @@
 // aucune dépendance à React ni aux stores.
 import Phaser from 'phaser';
 import { gameBus, type GameStatsView, type NetStatusView, type ZoneLink } from '../../bridge';
-import type { AnimState } from '../../generated/protocol';
+import type { AnimState, EntityKind, FxEvent } from '../../generated/protocol';
+import type { RemoteEntityView } from '../../net/interpolation';
 import { fonts, hexToNumber, palette } from '../../ui/theme/palette';
 import { MovementKeys } from '../input/movementKeys';
 import { CollisionGrid, type TiledMapLike } from '../movement/CollisionGrid';
@@ -13,8 +14,10 @@ import {
   animKey,
   facingFromAim,
   GAME_DATA_URL,
+  LOOT_TEXTURE,
   PLACEHOLDER_SPRITE,
   variantForId,
+  ZOMBIE_SPRITE,
   type Facing,
 } from '../sprites/survivors';
 import { TILESET_NAME, TILESET_TEXTURE } from './BootScene';
@@ -24,8 +27,14 @@ export const TILE_PX = 16;
 export const DEFAULT_ZOOM = 3;
 const STATS_INTERVAL_MS = 200;
 
-/** Profondeurs d'affichage : sol < décor < personnages (triés par y) < `above`. */
-const DEPTH = { ground: 0, decor: 1, actors: 10, above: 10_000 } as const;
+/** Profondeurs d'affichage : sol < décor < sang < objets < personnages (triés par y) < effets < `above`. */
+const DEPTH = { ground: 0, decor: 1, blood: 2, items: 3, actors: 10, effects: 9_000, above: 10_000 } as const;
+/** Distance (tuiles) sous laquelle le nom d'un objet au sol s'affiche. */
+const ITEM_LABEL_RANGE = 2;
+/** Durée de vie des effets (ms). */
+const FX_TTL: Record<FxEvent['kind'], number> = { shot: 90, swing: 140, hit: 180, blood: 9000, search: 400 };
+/** Touches d'action (position physique) → action envoyée au serveur. */
+const ACTION_CODES: Readonly<Record<string, 'interact' | 'reload'>> = { KeyE: 'interact', KeyR: 'reload' };
 /** Profondeurs de la couche d'interface (caméra non zoomée). */
 const UI_DEPTH = { veil: 0, vignette: 1, names: 2, status: 3 } as const;
 
@@ -48,11 +57,18 @@ export function clampView(center: number, view: number, world: number): number {
 }
 
 interface Actor {
+  readonly kind: EntityKind;
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly variant: string;
   readonly label: Phaser.GameObjects.Text | null;
   facing: Facing;
   anim: AnimState;
+  health: number;
+}
+
+interface ActiveFx {
+  readonly event: FxEvent;
+  readonly born: number;
 }
 
 type Phase = 'waiting' | 'loading-map' | 'ready' | 'map-error';
@@ -74,6 +90,10 @@ export class WorldScene extends Phaser.Scene {
   private aim = Math.PI / 2;
   private pointerActive = false;
   private lastStatsAt = 0;
+  private attackHeld = false;
+  private effects: ActiveFx[] = [];
+  private overlay!: Phaser.GameObjects.Graphics;
+  private groundFx!: Phaser.GameObjects.Graphics;
   private netState: NetStatusView['state'] = 'idle';
 
   constructor() {
@@ -106,11 +126,22 @@ export class WorldScene extends Phaser.Scene {
         .setShadow(2, 2, '#000000', 0, false, true),
     ).setDepth(UI_DEPTH.status);
 
+    this.overlay = this.addWorld(this.add.graphics()).setDepth(DEPTH.effects);
+    this.groundFx = this.addWorld(this.add.graphics()).setDepth(DEPTH.blood);
+
     this.input.on(Phaser.Input.Events.POINTER_MOVE, () => {
       this.pointerActive = true;
     });
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      this.pointerActive = true;
+      if (pointer.leftButtonDown()) this.attackHeld = true;
+    });
+    this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.leftButtonDown()) this.attackHeld = false;
+    });
     this.input.on(Phaser.Input.Events.GAME_OUT, () => {
       this.pointerActive = false;
+      this.attackHeld = false;
     });
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -145,8 +176,15 @@ export class WorldScene extends Phaser.Scene {
       const axes = this.keys.axes();
       const localView = link.getLocalPlayer();
       if (localView) this.updateAim(localView.x, localView.y, axes.moveX, axes.moveY);
-      link.update(now, { move_x: axes.moveX, move_y: axes.moveY, sprint: axes.sprint, aim: this.aim });
+      link.update(now, {
+        move_x: axes.moveX,
+        move_y: axes.moveY,
+        sprint: axes.sprint,
+        aim: this.aim,
+        attack: this.attackHeld,
+      });
       this.renderActors(link, now);
+      this.renderEffects(link, now);
     }
     this.statusText.setText(this.statusMessage());
     if (now - this.lastStatsAt >= STATS_INTERVAL_MS) {
@@ -218,7 +256,7 @@ export class WorldScene extends Phaser.Scene {
   private renderActors(link: ZoneLink, now: number): void {
     const local = link.getLocalPlayer();
     if (local) {
-      this.local ??= this.createActor(local.id, null);
+      this.local ??= this.createActor({ ...local, kind: 'player', name: '', health: 1 }, false);
       this.placeActor(this.local, local.x, local.y, local.aim, local.anim);
       this.followCamera(local.x * TILE_PX, local.y * TILE_PX);
     }
@@ -228,9 +266,10 @@ export class WorldScene extends Phaser.Scene {
       seen.add(remote.id);
       let actor = this.remotes.get(remote.id);
       if (!actor) {
-        actor = this.createActor(remote.id, remote.name);
+        actor = this.createActor(remote, remote.kind !== 'zombie');
         this.remotes.set(remote.id, actor);
       }
+      actor.health = remote.health;
       this.placeActor(actor, remote.x, remote.y, remote.aim, remote.anim);
     }
     for (const [id, actor] of this.remotes) {
@@ -239,24 +278,44 @@ export class WorldScene extends Phaser.Scene {
       actor.label?.destroy();
       this.remotes.delete(id);
     }
-    // Les noms suivent les sprites, en coordonnées écran (caméra d'interface).
-    for (const actor of this.remotes.values()) this.placeLabel(actor);
+    // Les noms suivent les sprites, en coordonnées écran (caméra d'interface). Celui d'un objet au
+    // sol n'apparaît qu'à proximité du joueur.
+    for (const actor of this.remotes.values()) {
+      if (actor.kind === 'item' && actor.label) {
+        const near =
+          local !== null &&
+          Math.hypot(actor.sprite.x / TILE_PX - local.x, actor.sprite.y / TILE_PX - local.y) <=
+            ITEM_LABEL_RANGE;
+        actor.label.setVisible(near);
+        if (!near) continue;
+      }
+      this.placeLabel(actor);
+    }
   }
 
-  private createActor(id: string, name: string | null): Actor {
+  private createActor(
+    view: Pick<RemoteEntityView, 'id' | 'kind' | 'name' | 'health'>,
+    withLabel: boolean,
+  ): Actor {
     const variants = (this.registry.get(VARIANTS_REGISTRY_KEY) as string[] | undefined) ?? [
       PLACEHOLDER_SPRITE,
     ];
-    const variant = variantForId(id, variants);
-    const sprite = this.addWorld(this.add.sprite(0, 0, variant, 0));
+    let variant: string;
+    if (view.kind === 'zombie')
+      variant = this.textures.exists(ZOMBIE_SPRITE) ? ZOMBIE_SPRITE : PLACEHOLDER_SPRITE;
+    else if (view.kind === 'item')
+      variant = this.textures.exists(LOOT_TEXTURE) ? LOOT_TEXTURE : PLACEHOLDER_SPRITE;
+    else variant = variantForId(view.id, variants);
+    const sprite = this.addWorld(this.add.sprite(0, 0, variant, view.kind === 'item' ? undefined : 0));
+    const name = withLabel ? view.name : null;
     let label: Phaser.GameObjects.Text | null = null;
     if (name !== null) {
       label = this.addUi(
         this.add
           .text(0, 0, name, {
             fontFamily: fonts.terminal,
-            fontSize: '20px',
-            color: palette.bone,
+            color: view.kind === 'item' ? palette.ash : palette.bone,
+            fontSize: view.kind === 'item' ? '18px' : '20px',
             stroke: '#000000',
             strokeThickness: 4,
           })
@@ -264,19 +323,78 @@ export class WorldScene extends Phaser.Scene {
           .setDepth(UI_DEPTH.names),
       );
     }
-    return { sprite, variant, label, facing: 'down', anim: 'idle' };
+    return { kind: view.kind, sprite, variant, label, facing: 'down', anim: 'idle', health: view.health };
   }
 
   private placeActor(actor: Actor, x: number, y: number, aim: number, anim: AnimState): void {
     // Arrondi au pixel monde : rendu net, pas de demi-pixels.
     actor.sprite.setPosition(Math.round(x * TILE_PX), Math.round(y * TILE_PX));
-    actor.sprite.setDepth(DEPTH.actors + y / 1000);
+    if (actor.kind === 'item') {
+      actor.sprite.setDepth(DEPTH.items);
+      return;
+    }
+    const dead = anim === 'dead';
+    // Un mort est couché (et passe sous les vivants) ; un zombie qui frappe rougit un instant.
+    actor.sprite.setDepth(dead ? DEPTH.items + 0.5 : DEPTH.actors + y / 1000);
+    actor.sprite.setAngle(dead ? 90 : 0);
+    if (dead) actor.sprite.setTint(0x8a7070);
+    else if (anim === 'attack') actor.sprite.setTint(0xffb0a0);
+    else actor.sprite.clearTint();
     const facing = facingFromAim(aim);
     if (facing !== actor.facing || anim !== actor.anim || !actor.sprite.anims.isPlaying) {
       actor.facing = facing;
       actor.anim = anim;
       const key = animKey(actor.variant, anim, facing);
       if (this.anims.exists(key)) actor.sprite.play(key, true);
+    }
+  }
+
+  /** Effets (tirs, coups, impacts, sang) et barres de vie des zombies blessés. */
+  private renderEffects(link: ZoneLink, now: number): void {
+    for (const event of link.takeFx()) this.effects.push({ event, born: now });
+    this.effects = this.effects.filter((fx) => now - fx.born < FX_TTL[fx.event.kind]);
+    const g = this.overlay;
+    const ground = this.groundFx;
+    g.clear();
+    ground.clear();
+    for (const { event, born } of this.effects) {
+      const life = 1 - (now - born) / FX_TTL[event.kind];
+      const x = event.x * TILE_PX;
+      const y = event.y * TILE_PX;
+      switch (event.kind) {
+        case 'shot':
+          g.lineStyle(1, 0xffe08a, 0.9 * life);
+          g.lineBetween(x, y, event.x2 * TILE_PX, event.y2 * TILE_PX);
+          g.fillStyle(0xfff2c0, life);
+          g.fillCircle(x + (event.x2 - event.x) * 4, y + (event.y2 - event.y) * 4, 1.5);
+          break;
+        case 'swing':
+          g.lineStyle(1, 0xe8e4d8, 0.8 * life);
+          g.lineBetween(x, y, event.x2 * TILE_PX, event.y2 * TILE_PX);
+          break;
+        case 'hit':
+          g.fillStyle(0xc0392b, 0.85 * life);
+          g.fillCircle(x, y, 3 + 2 * (1 - life));
+          break;
+        case 'blood':
+          ground.fillStyle(0x5a1010, 0.7 * Math.min(1, life * 3));
+          ground.fillCircle(x, y + 4, 3);
+          ground.fillCircle(x + 3, y + 6, 2);
+          break;
+        case 'search':
+          g.lineStyle(1, 0xd9cfa8, life);
+          g.strokeCircle(x, y, 6 + 6 * (1 - life));
+          break;
+      }
+    }
+    for (const actor of this.remotes.values()) {
+      if (actor.kind !== 'zombie' || actor.health >= 1 || actor.anim === 'dead') continue;
+      const bx = actor.sprite.x - 6;
+      const by = actor.sprite.y - 11;
+      g.fillStyle(0x000000, 0.7);
+      g.fillRect(bx - 1, by - 1, 14, 3);
+      g.fillStyle(0xc0392b, 1);
+      g.fillRect(bx, by, Math.max(1, Math.round(12 * actor.health)), 1);
     }
   }
 
@@ -316,7 +434,23 @@ export class WorldScene extends Phaser.Scene {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (isTextTarget(event.target)) return;
-    if (this.keys.keyDown(event)) event.preventDefault();
+    if (this.keys.keyDown(event)) {
+      event.preventDefault();
+      return;
+    }
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || !this.link) return;
+    const action = ACTION_CODES[event.code];
+    if (action) {
+      this.link.sendAction(action);
+      event.preventDefault();
+      return;
+    }
+    // Touches 1 à 9 : utiliser / équiper l'emplacement correspondant de l'inventaire.
+    const digit = /^Digit([1-9])$/.exec(event.code);
+    if (digit) {
+      this.link.sendAction('use', Number(digit[1]) - 1);
+      event.preventDefault();
+    }
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
@@ -325,6 +459,7 @@ export class WorldScene extends Phaser.Scene {
 
   private readonly onBlur = (): void => {
     this.keys.reset();
+    this.attackHeld = false;
   };
 
   // --- Interface ---------------------------------------------------------------------------

@@ -172,6 +172,28 @@ test('deux navigateurs voient le mouvement l’un de l’autre (HUD, trames reç
   }
 });
 
+/** Marche au pas (touches physiques) jusqu'à (tx, ty) à 0,1 tuile près ; `where()` donne la position serveur. */
+async function walkTo(page, where, tx, ty, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const p = where();
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+    const keys = [];
+    if (dx > 0.1) keys.push('KeyD');
+    if (dx < -0.1) keys.push('KeyA');
+    if (dy > 0.1) keys.push('KeyS');
+    if (dy < -0.1) keys.push('KeyW');
+    // Pas courts près du but : 50 ms ≈ un pas de 0,15 tuile.
+    const ms = Math.max(Math.abs(dx), Math.abs(dy)) > 1 ? 150 : 50;
+    for (const k of keys) await page.keyboard.down(k);
+    await page.waitForTimeout(ms);
+    for (const k of keys) await page.keyboard.up(k);
+    await page.waitForTimeout(150);
+  }
+}
+
 test('mur : marcher et sprinter contre un bâtiment ne fait jamais entrer la boîte dans une case solide', { timeout: TIMEOUT }, async () => {
   const browser = await h.launchBrowser();
   let observer = null;
@@ -180,10 +202,15 @@ test('mur : marcher et sprinter contre un bâtiment ne fait jamais entrer la bo�
     observer = await n.openZoneSocket(await n.apiAccountWithCharacter());
     const name = c.account.character;
     await n.sleep(300);
+    // Les nouveaux personnages apparaissent sur un point de la place (phase 3, QA-P2-03) : on rejoint
+    // d'abord (64, 64), par la colonne x = 64, libre jusqu'au bâtiment.
+    await walkTo(c.page, () => observer.last(name), 64, observer.last(name).y);
+    await walkTo(c.page, () => observer.last(name), 64, 64);
+    await n.sleep(300);
     const start = observer.last(name);
     const i0 = observer.snapshots.length;
 
-    // Depuis le point d’apparition (64, 64), le bâtiment au sud (tuiles x 57–65, y ≥ 68) est à 4 tuiles.
+    // Depuis (64, 64), le bâtiment au sud (tuiles x 57–65, y ≥ 68) est à 4 tuiles.
     await hold(c.page, ['ShiftLeft', 'KeyS'], 2_500); // sprint plein sud, 1,5 s poussé contre le mur
     const pushed = observer.last(name);
     await h.screenshot(c.page, 'phase2-03-joueur-contre-batiment.png');
@@ -196,7 +223,7 @@ test('mur : marcher et sprinter contre un bâtiment ne fait jamais entrer la bo�
     const snaps = observer.snapshots.slice(i0);
     const traj = track(snaps, (e) => e.name === name);
     assert.ok(traj.length >= 150, `${traj.length} positions serveur relevées`);
-    assert.ok(Math.abs(start.x - 64) < 1e-9 && Math.abs(start.y - 64) < 1e-9, `départ au point d’apparition (${start.x}, ${start.y})`);
+    assert.ok(Math.abs(start.x - 64) < 0.3 && Math.abs(start.y - 64) < 0.3, `départ vers (64, 64) : (${start.x}, ${start.y})`);
     // Contre le mur sud : bord bas de la boîte = 68 exactement (centre 67,7).
     assert.ok(Math.abs(pushed.y - (68 - n.MOVEMENT.player_half_size)) < 1e-9, `poussé contre le mur : y = ${pushed.y}`);
     assert.deepEqual(wallViolations(snaps), [], 'aucune boîte dans un mur');

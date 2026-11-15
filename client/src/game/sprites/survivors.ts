@@ -8,6 +8,12 @@ export type Facing = 'down' | 'left' | 'right' | 'up';
 export const SURVIVOR_VARIANTS = ['survivor', 'survivor_b', 'survivor_c', 'survivor_d'] as const;
 export type SurvivorVariant = (typeof SURVIVOR_VARIANTS)[number];
 
+/** Planches des zombies, par type (content/zombies.yaml) ; `rodeur` sert de repli. */
+export const ZOMBIE_SPRITES = ['zombie_rodeur'] as const;
+export const ZOMBIE_SPRITE = 'zombie_rodeur';
+/** Objet au sol (carton ouvert). */
+export const LOOT_TEXTURE = 'loot';
+
 /** Sprite de secours si un asset manque : texture générée, clairement nommée. */
 export const PLACEHOLDER_SPRITE = 'survivor_PLACEHOLDER';
 
@@ -66,7 +72,14 @@ export function facingFromAim(aim: number): Facing {
   return 'left';
 }
 
+/** Animation de planche utilisée pour un état d'entité (`attack` et `dead` n'ont pas d'images propres). */
+export function sheetState(anim: AnimState): 'idle' | 'walk' | 'run' {
+  if (anim === 'attack') return 'run';
+  if (anim === 'dead') return 'idle';
+  return anim;
+}
+
 /** Clé d'animation Phaser : `<variante>:<état>_<direction>` (états de survivor.json). */
 export function animKey(variant: string, anim: AnimState, facing: Facing): string {
-  return `${variant}:${anim}_${facing}`;
+  return `${variant}:${sheetState(anim)}_${facing}`;
 }

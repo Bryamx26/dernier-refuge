@@ -1,0 +1,25 @@
+# Survie du personnage. Jauges de 0 à 100 ; faim et soif : 100 = rassasié / désaltéré.
+
+max_health: 100
+# Perte par minute de jeu.
+hunger_per_min: 1.0
+thirst_per_min: 1.6
+# PV perdus par seconde quand la faim ou la soif est à 0 (cumulables).
+starving_damage_per_s: 0.25
+dehydrated_damage_per_s: 0.4
+# Saignement : PV perdus par seconde jusqu'à un bandage.
+bleeding_damage_per_s: 0.5
+# Régénération (PV/s) si faim et soif ≥ `regen_threshold` et sans saignement.
+regen_per_s: 0.15
+regen_threshold: 60
+
+# Inventaire.
+inventory_slots: 20
+max_weight: 18
+
+# Équipement de départ (nouveau personnage et réapparition après la mort).
+starter_kit:
+  - {item: knife, qty: 1}
+  - {item: water_bottle, qty: 1}
+  - {item: biscuits, qty: 1}
+  - {item: bandage, qty: 1}

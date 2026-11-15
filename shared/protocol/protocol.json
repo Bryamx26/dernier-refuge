@@ -1,6 +1,6 @@
 {
   "$comment": "Source unique du protocole WebSocket. Toute modification passe par l'Architecte, puis `python tools/codegen/generate.py` régénère les types Python et TypeScript. Voir docs/architecture/protocol.md.",
-  "version": 2,
+  "version": 3,
   "defs": {
     "ErrorCode": {
       "description": "Codes d'erreur renvoyés dans le message `error`.",
@@ -18,7 +18,18 @@
       "enum": [
         "idle",
         "walk",
-        "run"
+        "run",
+        "attack",
+        "dead"
+      ]
+    },
+    "EntityKind": {
+      "description": "Nature d'une entité : joueur, zombie ou objet au sol.",
+      "type": "string",
+      "enum": [
+        "player",
+        "zombie",
+        "item"
       ]
     },
     "EntityState": {
@@ -31,14 +42,12 @@
           "maxLength": 64
         },
         "kind": {
-          "type": "string",
-          "enum": [
-            "player"
-          ]
+          "$ref": "#/defs/EntityKind"
         },
         "name": {
           "type": "string",
-          "maxLength": 24
+          "maxLength": 32,
+          "description": "Nom du joueur, type de zombie ou nom de l'objet au sol."
         },
         "x": {
           "type": "number"
@@ -52,6 +61,12 @@
         },
         "anim": {
           "$ref": "#/defs/AnimState"
+        },
+        "health": {
+          "description": "Santé relative, de 0 (mort) à 1.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": [
@@ -61,7 +76,125 @@
         "x",
         "y",
         "aim",
-        "anim"
+        "anim",
+        "health"
+      ]
+    },
+    "ItemKind": {
+      "description": "Catégorie d'objet.",
+      "type": "string",
+      "enum": [
+        "melee",
+        "firearm",
+        "ammo",
+        "food",
+        "drink",
+        "medical"
+      ]
+    },
+    "InventorySlot": {
+      "description": "Un emplacement occupé de l'inventaire.",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "description": "Index de l'emplacement.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "item": {
+          "description": "Identifiant de l'objet (content/items.yaml).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "kind": {
+          "$ref": "#/defs/ItemKind"
+        },
+        "qty": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "weight": {
+          "description": "Poids de la pile, en kg.",
+          "type": "number",
+          "minimum": 0
+        },
+        "durability": {
+          "description": "Usure restante de 0 à 1 (1 pour un objet sans usure).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "loaded": {
+          "description": "Munitions dans le chargeur (armes à feu, 0 sinon).",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "slot",
+        "item",
+        "name",
+        "kind",
+        "qty",
+        "weight",
+        "durability",
+        "loaded"
+      ]
+    },
+    "FxKind": {
+      "description": "Effet visuel ponctuel.",
+      "type": "string",
+      "enum": [
+        "shot",
+        "swing",
+        "hit",
+        "blood",
+        "search"
+      ]
+    },
+    "FxEvent": {
+      "description": "Effet visuel : de (x, y) vers (x2, y2) pour un tir, au point (x, y) sinon.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/defs/FxKind"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "x2": {
+          "type": "number"
+        },
+        "y2": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "x",
+        "y",
+        "x2",
+        "y2"
+      ]
+    },
+    "ActionKind": {
+      "description": "Action ponctuelle du joueur.",
+      "type": "string",
+      "enum": [
+        "interact",
+        "use",
+        "drop",
+        "reload",
+        "respawn"
       ]
     }
   },
@@ -81,7 +214,7 @@
       ]
     },
     "input": {
-      "description": "Entrée de déplacement pour UN pas de simulation (1/tick_rate s). Envoyé à tick_rate Hz. Le `seq` de l'enveloppe sert de numéro d'entrée pour la réconciliation.",
+      "description": "Entrée pour UN pas de simulation (1/tick_rate s). Envoyé à tick_rate Hz. Le `seq` de l'enveloppe sert de numéro d'entrée pour la réconciliation.",
       "type": "object",
       "properties": {
         "move_x": {
@@ -104,13 +237,37 @@
         },
         "sprint": {
           "type": "boolean"
+        },
+        "attack": {
+          "description": "Gâchette (clic gauche) tenue pendant ce pas.",
+          "type": "boolean"
         }
       },
       "required": [
         "move_x",
         "move_y",
         "aim",
-        "sprint"
+        "sprint",
+        "attack"
+      ]
+    },
+    "action": {
+      "description": "Action ponctuelle, traitée au tick suivant : fouiller/ramasser (interact), utiliser ou équiper l'emplacement `slot` (use), le jeter (drop), recharger (reload), réapparaître après la mort (respawn).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/defs/ActionKind"
+        },
+        "slot": {
+          "description": "Emplacement visé (use, drop), -1 sinon.",
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 63
+        }
+      },
+      "required": [
+        "kind",
+        "slot"
       ]
     }
   },
@@ -203,6 +360,127 @@
       "required": [
         "client_time",
         "server_time"
+      ]
+    },
+    "vitals": {
+      "description": "État du personnage, envoyé à chaque changement et au moins deux fois par seconde.",
+      "type": "object",
+      "properties": {
+        "health": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_health": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hunger": {
+          "description": "0 (affamé) à 100 (rassasié).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "thirst": {
+          "description": "0 (assoiffé) à 100 (désaltéré).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "bleeding": {
+          "type": "boolean"
+        },
+        "dead": {
+          "type": "boolean"
+        },
+        "action": {
+          "description": "Action longue en cours (« Fouille : Pharmacie », « Rechargement »), vide sinon.",
+          "type": "string",
+          "maxLength": 48
+        },
+        "action_progress": {
+          "description": "Avancement de l'action longue, de 0 à 1.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "health",
+        "max_health",
+        "hunger",
+        "thirst",
+        "bleeding",
+        "dead",
+        "action",
+        "action_progress"
+      ]
+    },
+    "inventory": {
+      "description": "Inventaire complet du joueur, envoyé à chaque changement.",
+      "type": "object",
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/defs/InventorySlot"
+          },
+          "maxItems": 64
+        },
+        "capacity": {
+          "description": "Nombre d'emplacements.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "equipped": {
+          "description": "Emplacement de l'arme en main, -1 : mains nues.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_weight": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "slots",
+        "capacity",
+        "equipped",
+        "weight",
+        "max_weight"
+      ]
+    },
+    "fx": {
+      "description": "Effets visuels du tick, autour du joueur.",
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/defs/FxEvent"
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "events"
+      ]
+    },
+    "notice": {
+      "description": "Message court affiché au joueur (butin, inventaire plein…).",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "text"
       ]
     },
     "error": {

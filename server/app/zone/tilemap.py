@@ -6,7 +6,9 @@ groupes. Le serveur ne lit que :
 
 - le calque de tuiles `collision` : toute tuile non nulle est solide ;
 - le calque d'objets `spawns` : objets de type (ou classe, Tiled ≥ 1.9) `player_spawn`, convertis
-  de pixels en tuiles (`x / tilewidth`, `y / tileheight` ; centre de l'objet s'il a une taille).
+  de pixels en tuiles (`x / tilewidth`, `y / tileheight` ; centre de l'objet s'il a une taille) ;
+- le calque d'objets `buildings` (facultatif) : objets de type `building` avec leur nom et les
+  propriétés entières `door_x`, `door_y` (tuile de la porte), utilisés pour la fouille.
 """
 
 from __future__ import annotations
@@ -18,10 +20,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from app.zone.loot import BuildingInfo
 from app.zone.movement import CollisionGrid, overlaps_solid
 
 COLLISION_LAYER = "collision"
 SPAWNS_LAYER = "spawns"
+BUILDINGS_LAYER = "buildings"
 PLAYER_SPAWN_TYPE = "player_spawn"
 # Dimensions de la carte vide de repli (environnement de test uniquement).
 FALLBACK_SIZE = 128
@@ -39,6 +43,8 @@ class ZoneMap:
     grid: CollisionGrid
     # Points d'apparition des joueurs, en tuiles.
     spawns: list[tuple[float, float]] = field(default_factory=list)
+    # Bâtiments à fouiller (portes), en tuiles.
+    buildings: list[BuildingInfo] = field(default_factory=list)
 
     @property
     def width(self) -> int:
@@ -111,6 +117,17 @@ def _number(obj: dict[str, Any], key: str, default: float | None = None) -> floa
     return float(value)
 
 
+def _building(obj: dict[str, Any]) -> BuildingInfo | None:
+    """Bâtiment d'un objet Tiled, ou None s'il n'a pas de porte."""
+    if "building" not in (obj.get("type"), obj.get("class")):
+        return None
+    props = {p.get("name"): p.get("value") for p in obj.get("properties", []) if isinstance(p, dict)}
+    door_x, door_y = props.get("door_x"), props.get("door_y")
+    if not isinstance(door_x, int) or not isinstance(door_y, int) or isinstance(door_x, bool):
+        return None
+    return BuildingInfo(name=str(obj.get("name", ""))[:32], door_x=door_x, door_y=door_y)
+
+
 def parse_map(data: Any, map_id: str) -> ZoneMap:
     """Construit une `ZoneMap` depuis le JSON Tiled déjà décodé. Lève `MapLoadError`."""
     try:
@@ -155,7 +172,14 @@ def parse_map(data: Any, map_id: str) -> ZoneMap:
                 px = _number(obj, "x") + _number(obj, "width", 0.0) / 2
                 py = _number(obj, "y") + _number(obj, "height", 0.0) / 2
                 spawns.append((px / tile_w, py / tile_h))
-        return ZoneMap(map_id=map_id, grid=grid, spawns=spawns)
+        buildings = [
+            building
+            for group in layers
+            if group.get("type") == "objectgroup" and group.get("name") == BUILDINGS_LAYER
+            for obj in group.get("objects", [])
+            if isinstance(obj, dict) and (building := _building(obj)) is not None
+        ]
+        return ZoneMap(map_id=map_id, grid=grid, spawns=spawns, buildings=buildings)
     except MapLoadError as exc:
         raise MapLoadError(f"carte {map_id} : {exc}") from None
 

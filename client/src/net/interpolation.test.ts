@@ -3,7 +3,7 @@ import type { EntityState } from '../generated/protocol';
 import { InterpolationBuffer, lerpAngle } from './interpolation';
 
 function entity(id: string, x: number, y = 0, aim = 0): EntityState {
-  return { id, kind: 'player', name: id.toUpperCase(), x, y, aim, anim: 'walk' };
+  return { id, kind: 'player', name: id.toUpperCase(), x, y, aim, anim: 'walk', health: 1 };
 }
 
 describe('InterpolationBuffer', () => {

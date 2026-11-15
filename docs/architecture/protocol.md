@@ -1,4 +1,4 @@
-# Protocole WebSocket de zone (v2)
+# Protocole WebSocket de zone (v3)
 
 Source unique : [`shared/protocol/protocol.json`](../../shared/protocol/protocol.json). Les types
 Python (`server/app/protocol/generated.py`) et TypeScript (`client/src/generated/protocol.ts`) en
@@ -73,19 +73,25 @@ Client                          REST                          WebSocket /ws/zone
 | `t` | `d` | Traitement |
 | --- | --- | --- |
 | `ping` | `client_time` (ms, ≥ 0) | immédiat : réponse `pong` |
-| `input` | `move_x`, `move_y` ∈ [-1, 1], `aim` ∈ [-7, 7] (radians), `sprint` | en file ; **un message = un pas de `1 / tick_rate` s** ; le `seq` de l'enveloppe est le numéro d'entrée |
+| `input` | `move_x`, `move_y` ∈ [-1, 1], `aim` ∈ [-7, 7] (radians), `sprint`, `attack` (gâchette tenue) | en file ; **un message = un pas de `1 / tick_rate` s** ; le `seq` de l'enveloppe est le numéro d'entrée |
+| `action` | `kind` ∈ `interact`, `use`, `drop`, `reload`, `respawn` ; `slot` (-1 à 63) | file d'actions (16 au plus), traitée au tick suivant ; voir `phase-3-contracts.md` |
 
 ### Serveur → client
 
 | `t` | `d` | Quand |
 | --- | --- | --- |
-| `welcome` | `protocol_version` (2), `zone_id`, `character_id`, `tick_rate`, `server_time` (ms epoch), `entity_id`, `map_id` | premier message après ouverture (`seq` 1) |
+| `welcome` | `protocol_version` (3), `zone_id`, `character_id`, `tick_rate`, `server_time` (ms epoch), `entity_id`, `map_id` | premier message après ouverture (`seq` 1) |
 | `snapshot` | `ack_seq`, `entities: EntityState[]` | à chaque tick |
 | `pong` | `client_time` (renvoyé tel quel), `server_time` | réponse à `ping` ; RTT = maintenant − `client_time` |
+| `vitals` | `health`, `max_health`, `hunger`, `thirst`, `bleeding`, `dead`, `action`, `action_progress` | à chaque changement et toutes les 10 ticks |
+| `inventory` | `slots: InventorySlot[]`, `capacity`, `equipped` (-1 : mains nues), `weight`, `max_weight` | à la connexion et à chaque changement |
+| `fx` | `events: FxEvent[]` (`kind` ∈ shot, swing, hit, blood, search ; `x`, `y`, `x2`, `y2`) | effets du tick à moins de `interest_radius` |
+| `notice` | `text` (≤ 120 caractères) | message court au joueur |
 | `error` | `code`, `message` (≤ 200 caractères) | message refusé ; la connexion reste ouverte |
 
-`EntityState` : `id` (ex. `p12`, stable pendant la connexion), `kind` (`player`), `name`, `x`, `y`
-(tuiles, centre de la boîte), `aim` (radians), `anim` (`idle`, `walk`, `run`). Un snapshot contient
+`EntityState` : `id` (ex. `p12`, `z4`, `i7`, stable pendant la connexion), `kind` (`player`, `zombie`,
+`item`), `name` (≤ 32), `x`, `y` (tuiles, centre de la boîte), `aim` (radians), `anim` (`idle`, `walk`,
+`run`, `attack`, `dead`), `health` (0 à 1). Un snapshot contient
 toutes les entités dans un rayon de `interest_radius` (32) tuiles autour du joueur
 (`dx² + dy² ≤ r²`), **lui compris** ; une entité absente n'est plus visible. Snapshots complets en
 phase 2 (deltas en phase 7).

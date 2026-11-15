@@ -6,7 +6,7 @@ est listé ici avec sa source et sa licence. Un asset provisoire porte `_PLACEHO
 | Pack | Auteur | Source | Licence | Utilisé pour |
 | --- | --- | --- | --- | --- |
 | Roguelike City Pack | Kenney (kenney.nl) | miroir GitHub public `shorepine/kenney` (`2d/Roguelike City Pack/Tiles`) | CC0 1.0 | `tilesets/valcendre.png` : sols, routes, trottoirs, toits, façades, portes et fenêtres, arbres, voitures, débris |
-| RPG Urban Pack | Kenney (kenney.nl) | miroir GitHub public `shorepine/kenney` (`2d/RPG Urban Pack/Tiles`) | CC0 1.0 | `sprites/survivor*.png` : 4 personnages jouables |
+| RPG Urban Pack | Kenney (kenney.nl) | miroir GitHub public `shorepine/kenney` (`2d/RPG Urban Pack/Tiles`) | CC0 1.0 | `sprites/survivor*.png` : 4 personnages jouables ; `sprites/zombie_rodeur.png` (dérivé) ; `sprites/loot.png` (carton, tuile 274) |
 
 Provenance : kenney.nl était inaccessible depuis l'environnement de développement ; les fichiers ont été
 pris sur le miroir GitHub `shorepine/kenney`, dont le `LICENSE.txt` reprend la licence CC0 de Kenney.
@@ -24,6 +24,9 @@ Tout est produit par `tools/assets/build_assets.py` (déterministe, sorties vers
   `sidewalk_weeds` (herbe qui perce l'asphalte).
 - `sprites/survivor.png`, `survivor_b`, `survivor_c`, `survivor_d` (+ `.json`) : 3 × 4 cadres de 16 px,
   couleurs d'origine (pas d'étalonnage, pour que les joueurs ressortent sur le décor sombre).
+- `sprites/zombie_rodeur.png` (+ `.json`) : **dérivé** du 6ᵉ personnage du RPG Urban Pack (rangée 3) :
+  peau et cheveux virés au vert livide, vêtements désaturés et assombris, trois pixels de sang séché.
+- `sprites/loot.png` : objet posé au sol (carton ouvert, tuile 274 du RPG Urban Pack), sans retouche.
 
 Régénérer : `python3 -I tools/assets/build_assets.py [dossier 2d des packs Kenney]`
 (`--check` pour vérifier que les fichiers versionnés sont à jour).
